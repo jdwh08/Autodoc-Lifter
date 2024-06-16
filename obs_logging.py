@@ -1,6 +1,32 @@
+#####################################################
+# LIFT DOCUMENT INTAKE PROCESSOR [OBSERVATION/LOGGING]
+#####################################################
+# Jonathan Wang (jwang15, jonathan.wang@discover.com)
+# Greenhouse GenAI Modeling Team
+
+# ABOUT: 
+# This project automates the processing of legal documents 
+# requesting information about our customers.
+# These are handled by LIFT
+# (Legal, Investigation, and Fraud Team)
+
+# This is the Observation and Logging
+# to see the actions undertaken in the RAG pipeline.
+#####################################################
+## TODOS:
+# 
+
+#####################################################
+## IMPORTS:
 from typing import Dict, List, Any, Optional
 from treelib import Tree
 
+import streamlit as st
+
+# Callbacks
+from llama_index.core.callbacks import CallbackManager, LlamaDebugHandler
+
+# Loads of stuff for the CICD
 from llama_index.core.instrumentation.events import BaseEvent
 from llama_index.core.instrumentation.event_handlers import BaseEventHandler
 
@@ -53,11 +79,23 @@ from llama_index.core.instrumentation.events.synthesis import (
 )
 from llama_index.core.instrumentation.span import SimpleSpan
 from llama_index.core.instrumentation.span_handlers.base import BaseSpanHandler
+# Pretty Printing
+from llama_index.core.response.notebook_utils import display_source_node
 
-class ExampleEventHandler(BaseEventHandler):
-    """Example event handler.
+# End user handler
+from llama_index.core.instrumentation import get_dispatcher
 
-    This event handler is an example of how to create a custom event handler.
+#####################################################
+## Code
+@st.cache_resource
+def get_callback_manager() -> CallbackManager:
+    """Create the callback manager for the code."""
+    callback_manager = CallbackManager([LlamaDebugHandler()])
+    return callback_manager
+
+
+class RAGEventHandler(BaseEventHandler):
+    """RAG event handler. Built off the example custom event handler.
 
     In general, logged events are treated as single events in a point in time,
     that link to a span. The span is a collection of events that are related to
@@ -82,13 +120,21 @@ class ExampleEventHandler(BaseEventHandler):
     - SynthesizeEndEvent
     - QueryEndEvent
     """
-
     events: List[BaseEvent] = []
 
     @classmethod
     def class_name(cls) -> str:
         """Class name."""
-        return "ExampleEventHandler"
+        return "RAGEventHandler"
+
+    def _print_event_nodes(event_nodes: List) -> str:
+        """Print a list of nodes nicely."""
+        output_str = "["
+        for node in event_nodes:
+            output_str += (display_source_node(node, 1000) + "\n")
+            output_str += "* * * * * * * * * * * *"
+        output_str += "]"
+        return (output_str)
 
     def handle(self, event: BaseEvent) -> None:
         """Logic for handling event."""
@@ -156,14 +202,18 @@ class ExampleEventHandler(BaseEventHandler):
             print(event.str_or_query_bundle)
         if isinstance(event, RetrievalEndEvent):
             print(event.str_or_query_bundle)
-            print(event.nodes)
+            # print(event.nodes)
+            print(_print_event_nodes(event.nodes))
         if isinstance(event, ReRankStartEvent):
             print(event.query)
-            print(event.nodes)
+            # print(event.nodes)
+            for node in event.nodes:
+                print(display_source_node(node))
             print(event.top_n)
             print(event.model_name)
         if isinstance(event, ReRankEndEvent):
-            print(event.nodes)
+            # print(event.nodes)
+            print(_print_event_nodes(event.nodes))
         if isinstance(event, QueryStartEvent):
             print(event.query)
         if isinstance(event, QueryEndEvent):
@@ -178,9 +228,9 @@ class ExampleEventHandler(BaseEventHandler):
             print(event.query)
         if isinstance(event, GetResponseStartEvent):
             print(event.query_str)
-
         self.events.append(event)
         print("-----------------------")
+        return (None)
 
     def _get_events_by_span(self) -> Dict[str, List[BaseEvent]]:
         events_by_span: Dict[str, List[BaseEvent]] = {}
@@ -205,7 +255,6 @@ class ExampleEventHandler(BaseEventHandler):
                 parent=None,
                 data=sorted_events[0].timestamp,
             )
-
             for event in sorted_events:
                 tree.create_node(
                     tag=f"{event.class_name()}: {event.id_}",
@@ -213,7 +262,6 @@ class ExampleEventHandler(BaseEventHandler):
                     parent=event.span_id,
                     data=event.timestamp,
                 )
-
             trees.append(tree)
             tree = Tree()
         return trees
@@ -228,9 +276,10 @@ class ExampleEventHandler(BaseEventHandler):
                 )
             )
             print("")
+        return (None)
 
 
-class ExampleSpanHandler(BaseSpanHandler[SimpleSpan]):
+class RAGSpanHandler(BaseSpanHandler[SimpleSpan]):
     span_dict = {}
 
     @classmethod
@@ -279,3 +328,15 @@ class ExampleSpanHandler(BaseSpanHandler[SimpleSpan]):
         pass
         # if id in self.span_dict:
         #    return self.span_dict[id].pop()
+
+
+@st.cache_resource
+def get_obs():
+    """Get observability for the RAG pipeline."""
+    dispatcher = get_dispatcher()
+    event_handler = RAGEventHandler()
+    span_handler = RAGSpanHandler()
+
+    dispatcher.add_event_handler(event_handler)
+    dispatcher.add_span_handler(span_handler)
+    return dispatcher
