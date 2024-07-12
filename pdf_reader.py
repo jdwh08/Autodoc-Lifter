@@ -16,28 +16,55 @@
 #####################################################
 # TODO Board:
 # I don't think the current code is elegent... :(
+    
+# TODO: Replace chunk_by_header with a custom solution replicating bySimilarity
+# https://docs.unstructured.io/api-reference/api-services/chunking#by-similarity-chunking-strategy
+# Some hybrid thing...
+    
+
+# Come up with a awy to handle summarizing images and tables using MultiModalLLM after the processing into nodes.
+    # TODO: Put this into PDFReaderUtilities? Along with the other functions for stuff like email?
 
 # Investigate PDFPlumber as a backup/alternative for Unstructured. 
     # `https://github.com/jsvine/pdfplumber`
+    # nevermind, this is essentially pdfminer.six but nicer
+
+# Chunk hierarchy from https://www.reddit.com/r/LocalLLaMA/comments/1dpb9ow/how_we_chunk_turning_pdfs_into_hierarchical/
+# Investigate document parsing algorithms from https://github.com/BobLd/DocumentLayoutAnalysis?tab=readme-ov-file
+# Investigate document parsing algorithms from https://github.com/Filimoa/open-parse?tab=readme-ov-file
+
+# Competition:
+    # https://github.com/infiniflow/ragflow
+    # https://github.com/deepdoctection/deepdoctection
 
 #####################################################
 ## IMPORTS
 import os
 import re
 import regex
-from typing import Any, List, IO, Optional
+
+from abc import ABC, abstractmethod
+from typing import Any, List, Tuple, IO, Optional
+from llama_index.core.bridge.pydantic import Field
 
 import numpy as np
 
-import pdf_reader_utils as pdfrutils
+from io import BytesIO
+from base64 import b64encode, b64decode
+from PIL import Image as PILImage
+
+from pdf_reader_utils import clean_pdf_chunk, dedupe_title_chunks, combine_listitem_chunks, remove_header_footer_pagenum
 
 # Unstructured Document Parsing
 from unstructured.partition.pdf import partition_pdf
 from unstructured.cleaners.core import clean_extra_whitespace, group_broken_paragraphs #, clean_ordered_bullets, clean_bullets, clean_dashes
 from unstructured.chunking.title import chunk_by_title
+# Unstructured Element Types
+from unstructured.documents import elements, email_elements
 
 # Llamaindex Nodes
-from llama_index.core.schema import Document, BaseNode, TextNode, NodeRelationship, RelatedNodeInfo
+from llama_index.core.settings import Settings
+from llama_index.core.schema import Document, BaseNode, TextNode, ImageNode, NodeRelationship, RelatedNodeInfo
 from llama_index.core.readers.base import BaseReader
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.node_parser import NodeParser
@@ -48,6 +75,25 @@ from joblib import Parallel, delayed
 ## Lazy Imports
 # import nltk
 #####################################################
+
+# Additional padding around the PDF extracted images
+PDF_IMAGE_HORIZONTAL_PADDING = 20
+PDF_IMAGE_VERTICAL_PADDING = 20
+os.environ['EXTRACT_IMAGE_BLOCK_CROP_HORIZONTAL_PAD'] = str(PDF_IMAGE_HORIZONTAL_PADDING)
+os.environ['EXTRACT_IMAGE_BLOCK_CROP_VERTICAL_PAD'] = str(PDF_IMAGE_VERTICAL_PADDING)
+
+# class TextReader(BaseReader):
+#     def __init__(self, text: str) -> None:
+#         """Init params."""
+#         self.text = text
+
+
+# class ImageReader(BaseReader):
+#     def __init__(self, image: Any) -> None:
+#         """Init params."""
+#         self.image = image
+
+
 class UnstructuredPDFReader():
     # Yes, we could inherit from LlamaIndex BaseReader even though I don't think it's a good idea.
     # Have you seen the Llamaindex Base Reader? It's silly. """OOP"""
@@ -58,27 +104,59 @@ class UnstructuredPDFReader():
 
     # yes I do want to bind these to the class. 
     # you better not be changing the embedding model or node parser on me across different PDFReaders. that's absurd.
-    embed_model: BaseEmbedding
-    node_parser: NodeParser
+    # embed_model: BaseEmbedding
+    # _node_parser: NodeParser# = Field(
+    #     description="Node parser to run on each Unstructured Title Chunk",
+    #     default=Settings.node_parser,
+    # )
+    _max_characters: int# = Field(
+    #     description="The maximum number of characters in a node",
+    #     default=8192,
+    # )
+    _new_after_n_chars: int #= Field(
+    #     description="The number of characters after which a new node is created",
+    #     default=1024,
+    # )
+    _overlap_n_chars: int #= Field(
+    #     description="The number of characters to overlap between nodes",
+    #     default=128,
+    # )
+    _overlap: int #= Field(
+    #     description="The number of characters to overlap between nodes",
+    #     default=128,
+    # )
+    _overlap_all: bool #= Field(
+    #     description="Whether to overlap all nodes",
+    #     default=False,
+    # )
+    _multipage_sections: bool #= Field(
+    #     description="Whether to include multipage sections",
+    #     default=False,
+    # )
 
+    ## TODO: Fix this big ball of primiatives and turn it into a class.
     def __init__(
         self,
-        embed_model: BaseEmbedding,  # Built on HuggingfaceEmbeddings, but you can use others.
-        node_parser: NodeParser,  # Suggest using a SemanticNodeParser.
-        max_characters: int = 8192, new_after_n_chars: int = 1024, overlap_n_chars: int = 128, 
-        overlap: int = 128, overlap_all: bool = False, multipage_sections: bool = False, 
-        # *args: Any, **kwargs: Any
+        # node_parser: Optional[NodeParser],  # Suggest using a SemanticNodeParser.
+        max_characters: int = 2048, 
+        new_after_n_chars: int = 512, 
+        overlap_n_chars: int = 128, 
+        overlap: int = 128, 
+        overlap_all: bool = False, 
+        multipage_sections: bool = True, 
+        **kwargs: Any
     ) -> None:
+        # node_parser = node_parser or Settings.node_parser
         """Init params."""
-        self.max_characters = max_characters
-        self.new_after_n_chars = new_after_n_chars
-        self.overlap_n_chars = overlap_n_chars
-        self.overlap = overlap
-        self.overlap_all = overlap_all
-        self.multipage_sections = multipage_sections
-        self.embed_model = embed_model  # set the embedding model to convert text to vector.
-        self.node_parser = node_parser  # set node parser to run on each Unstructured Title Chunk
-        # super().__init__(*args)  # not passing kwargs to parent bc it cannot accept it
+        super().__init__(**kwargs)
+
+        self._max_characters = max_characters
+        self._new_after_n_chars = new_after_n_chars
+        self._overlap_n_chars = overlap_n_chars
+        self._overlap = overlap
+        self._overlap_all = overlap_all
+        self._multipage_sections = multipage_sections
+        # self._node_parser = node_parser or Settings.node_parser  # set node parser to run on each Unstructured Title Chunk
 
         # Prerequisites for Unstructured.io to work
         import nltk
@@ -95,95 +173,222 @@ class UnstructuredPDFReader():
 
 
     # """DATA LOADING FUNCTIONS"""
-    def check_pdf_read_in(
-        self, 
-        pdf_file_path: Optional[str],
-        pdf_file: Optional[IO[bytes]],
-        pdf_chunks: List[BaseNode],
-    ) -> bool:
+    def _node_rel_prev_next(self, prev_node: BaseNode, next_node: BaseNode) -> Tuple[BaseNode, BaseNode]:
+        """Update pre-next node relationships between two nodes."""
+        prev_node.relationships[NodeRelationship.NEXT] = RelatedNodeInfo(
+            node_id=next_node.node_id,
+            metadata={"filename": next_node.metadata['filename']}
+        )
+        next_node.relationships[NodeRelationship.PREVIOUS] = RelatedNodeInfo(
+            node_id=prev_node.node_id,
+            metadata={"filename": prev_node.metadata['filename']}
+        )
+        return (prev_node, next_node)
+
+    
+    def _node_rel_parent_child(self, parent_node: BaseNode, child_node: BaseNode) -> Tuple[BaseNode, BaseNode]:
+        """Update parent-child node relationships between two nodes."""
+        parent_node.relationships[NodeRelationship.CHILD] = RelatedNodeInfo(
+            node_id=child_node.node_id,
+            metadata={"filename": child_node.metadata['filename']}
+        )
+        child_node.relationships[NodeRelationship.PARENT] = RelatedNodeInfo(
+            node_id=parent_node.node_id,
+            metadata={"filename": parent_node.metadata['filename']}
+        )
+        return (parent_node, child_node)
+    
+    
+    def _handle_text_chunk(self, pdf_text_chunk: elements.Element) -> TextNode:
+        """Given a text chunk from Unstructured, convert it to a TextNode for LlamaIndex.
+
+        Args:
+            pdf_text_chunk (elements.Element): Input text chunk from Unstructured.
+
+        Returns:
+            TextNode: LlamaIndex TextNode which saves the text as HTML for structure.
         """
-        Given a list of PDFs from Unstructured's "auto",
-        confirm that it correctly extracted information from each page.
+        filename = os.path.join(str(pdf_text_chunk.metadata.file_directory), pdf_text_chunk.metadata.filename) if (pdf_text_chunk.metadata.filename is not None) else ''
+        new_node = TextNode(
+        text=pdf_text_chunk.text, 
+            id_=pdf_text_chunk.id,
+            metadata={
+                'type': pdf_text_chunk.category,
+                'parent_id': pdf_text_chunk.metadata.parent_id,
+                'depth': pdf_text_chunk.metadata.category_depth,
+                'filename': pdf_text_chunk.metadata.filename,
+                'page number': pdf_text_chunk.metadata.page_number,
+                'coordinates': pdf_text_chunk.metadata.coordinates.to_dict() if (pdf_text_chunk.metadata.coordinates is not None) else None,
+                'languages': pdf_text_chunk.metadata.languages,
+                'emphasized_text': '\n'.join(pdf_text_chunk.metadata.emphasized_text_contents or []),
+                'link_texts': pdf_text_chunk.metadata.link_texts,
+                'link_urls': pdf_text_chunk.metadata.link_urls,
+                'link_start_indexes': pdf_text_chunk.metadata.link_start_indexes,
+                # 'index number': '',
+                # 'keywords': '', # node_keywords,
+                # 'summary': '',
+                # 'orignal_text': chunk.text,
+                # 'window': '',
+            },
+            excluded_llm_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text'],
+            excluded_embed_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'page number', 'original_text', 'window', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text']
+        )
+        
+        return (new_node)
+    
+    
+    def _handle_table_chunk(self, pdf_table_chunk: elements.Table | elements.TableChunk) -> TextNode:
+        """Given a table chunk from Unstructured, convert it to a TextNode for LlamaIndex.
+
+        Args:
+            pdf_table_chunk (elements.Table | elements.TableChunk): Input table chunk from Unstructured
+
+        Returns:
+            TextNode: LlamaIndex TextNode which saves the table as HTML for structure.
+            
+        NOTE: You will need to get the summary of the table for better performance.
         """
-        # Get number of pages in PDF
-        from pdfminer.pdfparser import PDFParser
-        from pdfminer.pdfdocument import PDFDocument
-        from pdfminer.pdfpage import PDFPage
-        # from pdfminer.pdfinterp import resolve1
-        from pdfminer.pdftypes import resolve1
-        # 0. Get number of pages in PDF
-        pdf_num_pages = resolve1(
-            PDFDocument(
-                PDFParser(
-                    open(pdf_file_path, 'rb') if pdf_file_path else pdf_file
-                )
-            ).catalog['Pages']
-        )['Count']
+        filename = os.path.join(str(pdf_table_chunk.metadata.file_directory), pdf_table_chunk.metadata.filename) if (pdf_table_chunk.metadata.filename is not None) else ''
+        new_node = TextNode(
+            text=pdf_table_chunk.metadata.text_as_html, 
+            id_=pdf_table_chunk.id,
+            metadata={
+                'type': pdf_table_chunk.category,
+                'parent_id': pdf_table_chunk.metadata.parent_id,
+                'depth': pdf_table_chunk.metadata.category_depth,
+                'filename': pdf_table_chunk.metadata.filename,
+                'page number': pdf_table_chunk.metadata.page_number,
+                'coordinates': pdf_table_chunk.metadata.coordinates.to_dict() if (pdf_table_chunk.metadata.coordinates is not None) else None,
+                'languages': pdf_table_chunk.metadata.languages,
+                'emphasized_text': '\n'.join(pdf_table_chunk.metadata.emphasized_text_contents or []),
+                'link_texts': pdf_table_chunk.metadata.link_texts,
+                'link_urls': pdf_table_chunk.metadata.link_urls,
+                'link_start_indexes': pdf_table_chunk.metadata.link_start_indexes,
+                # 'index number': '',
+                # 'keywords': '', # node_keywords,
+                # 'summary': '',
+                # 'orignal_text': chunk.text,
+                # 'window': '',
+                'orignal_table_text': pdf_table_chunk.text,  # NOTE: This attribute is used to determine regular TextNodes from TableNodes.
+            },
+            excluded_llm_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text'],
+            excluded_embed_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'page number', 'original_text', 'window', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text']
+        )
+        
+        return (new_node)
     
-        # Get readable content from each page.
-        content_per_page = []
-        current_page_text = ""
-        current_page_num = 1
     
-        for chunk in pdf_chunks:
-            if (int(chunk.metadata.to_dict()['page_number']) == current_page_num):
-                current_page_text += (("\n" + chunk.text) if current_page_text != '' else chunk.text)
-            else:
-                content_per_page.append(current_page_text)
-                current_page_text = chunk.text
-                current_page_num += 1
+    def _handle_image_chunk(self, pdf_image_chunk: elements.Element) -> ImageNode:
+        """Given an image chunk from UnstructuredIO, read it in and convert it into a Llamaindex ImageNode.
+
+        Args:
+            pdf_image_chunk (elements.Element): The input image element from UnstructuredIO. We'll allow all types, just in case you want to process some weird chunks.
+
+        Returns:
+            ImageNode: The image saved as a Llamaindex ImageNode.
+        """
+        pdf_image_chunk_data_available = pdf_image_chunk.metadata.to_dict()
+        
+        # Check for either saved image_path or image_base64/image_mime_type
+        if (('image_path' not in pdf_image_chunk_data_available) and ('image_base64' not in pdf_image_chunk_data_available)):
+            raise Exception('Image chunk does not have either image_path or image_base64/image_mime_type. Are you sure this is an image?')
+        
+        # Make the image node.
+        new_node = ImageNode(
+            text=pdf_image_chunk.text,
+            id_=pdf_image_chunk.id,
+            metadata={
+                'type': pdf_image_chunk.category,
+                'parent_id': pdf_image_chunk.metadata.parent_id,
+                'depth': pdf_image_chunk.metadata.category_depth,
+                'filename': pdf_image_chunk.metadata.filename,
+                'page number': pdf_image_chunk.metadata.page_number,
+                'coordinates': pdf_image_chunk.metadata.coordinates.to_dict() if (pdf_image_chunk.metadata.coordinates is not None) else None,
+                'languages': pdf_image_chunk.metadata.languages,
+                'emphasized_text': '\n'.join(pdf_image_chunk.metadata.emphasized_text_contents or []),
+                'link_texts': pdf_image_chunk.metadata.link_texts,
+                'link_urls': pdf_image_chunk.metadata.link_urls,
+                'link_start_indexes': pdf_image_chunk.metadata.link_start_indexes,
+                # 'index number': '',
+                # 'keywords': '', # node_keywords,
+                # 'summary': '',
+                # 'orignal_text': chunk.text,
+                # 'window': '',
+            },
+            excluded_llm_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes'],
+            excluded_embed_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'page number', 'original_text', 'window', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes']
+        )
+        
+        # Add image data to image node
+        image = None
+        if ('image_path' in pdf_image_chunk_data_available):
+            # Save image path to image node
+            new_node.image_path = pdf_image_chunk_data_available['image_path']
+            
+            # Load image from path, convert to base64
+            image_pil = PILImage.open(pdf_image_chunk_data_available['image_path'])
+            image_buffer = BytesIO()
+            image_pil.save(image_buffer, format='JPEG')
+            image = b64encode(image_buffer.getvalue()).decode('utf-8')
+            
+            new_node.image = image
+            new_node.image_mimetype = 'image/jpeg'
+            del image_buffer, image_pil
+        elif ('image_base64' in pdf_image_chunk_data_available):
+            # Save image base64 to image node
+            new_node.image = pdf_image_chunk_data_available['image_base64']
+            new_node.image_mimetype = pdf_image_chunk_data_available['image_mime_type']
+        
+        ## TODO: Use Multimodal LLM to get summary of image, save as text, send to embedding.
+        return (new_node)
+
     
-        # Append last page.
-        content_per_page.append(current_page_text)
-    
-        # Remove redacted, cid, and any symbols.
-        symbols_re = re.compile(r'[^\w\s]')
-        cid_re = re.compile(r'\(?cid\:? ?\d+\)?')
-    
-        def _clean_page_text(text: str) -> str:
-            """
-            Removes any commonly added-on text like CID/Censored
-            that can confuse the reader into thinking the PDF is completely readable w/ text
-            instead of being an unreadable low-quality scan.
-            """
-            text = re.sub(symbols_re, "", text)
-            text = text.lower().replace('redacted', '').replace('censored', '')
-            text = re.sub(cid_re, "", text)
-            text = text.strip()
-            return(text)
-        content_per_page = [len(_clean_page_text(text)) for text in content_per_page]
-    
-        # Check if number of pages with text is equal to total number of pages in document.
-        pdf_num_pages_w_text = (np.array(content_per_page) > 0).sum()
-        return(pdf_num_pages_w_text == pdf_num_pages)
+    def _handle_composite_chunk(self, pdf_composite_chunk: elements.CompositeElement) -> BaseNode:
+        """Given a composite chunk from Unstructured, convert it into a node and handle it dependencies as well."""
+        # Start by getting a list of all the nodes which were combined into the composite chunk.
+        # child_chunks = pdf_composite_chunk.metadata.to_dict()['orig_elements']
+        child_chunks = pdf_composite_chunk.metadata.orig_elements or []
+        child_nodes = []
+        for chunk in child_chunks:
+            child_nodes.append(self._handle_chunk(chunk))  # process all the child chunks.
+
+        # Then build the Composite Chunk into a Node.
+        composite_node = self._handle_text_chunk(pdf_text_chunk=pdf_composite_chunk)
+
+        # Set relationships between chunks.
+        for index in range(1, len(child_nodes)):
+            child_nodes[index-1], child_nodes[index] = self._node_rel_prev_next(child_nodes[index-1], child_nodes[index])
+        for index, node in enumerate(child_nodes):
+            composite_node, child_nodes[index] = self._node_rel_parent_child(composite_node, child_nodes[index])
+
+        # TODO: How do we handle the child nodes?
+        composite_node.metadata['orig_nodes'] = child_nodes
+        composite_node.excluded_llm_metadata_keys = ['filename', 'coordinates', 'chunk_number', 'window', 'orig_nodes']
+        composite_node.excluded_embed_metadata_keys = ['filename', 'coordinates', 'chunk_number', 'page number', 'original_text', 'window', 'keywords', 'summary', 'orig_nodes']
+        return(composite_node)
 
 
-    def clean_pdf_chunk(self, pdf_chunk):  # TODO: type hinting for input as Unstructured.Documents.Elements
-        """
-        Given a single element of text from a pdf read by Unstructured, clean its text.
-        """
-        chunk_text = pdf_chunk.text
-        if (len(chunk_text) > 0):
-            # Clean any control characters which break language detection
-            RE_BAD_CHARS = regex.compile(r"[\p{Cc}\p{Cs}]+")
-            chunk_text = RE_BAD_CHARS.sub("", chunk_text)
-    
-            # Remove PDF citations text
-            chunk_text = re.sub("\\(cid:\\d+\\)", "", chunk_text)  # matches (cid:###)
-            # Clean whitespace and broken paragraphs
-            chunk_text = clean_extra_whitespace(chunk_text)
-            chunk_text = group_broken_paragraphs(chunk_text)
-            # Save cleaned text.
-            pdf_chunk.text = chunk_text
-    
-        return pdf_chunk
+    def _handle_chunk(self, chunk: elements.Element) -> BaseNode:
+        """Convert Unstructured element chunks to Llamaindex Node. Determine which chunk handling to use based on the element type."""
+        # Composite (multiple nodes combined together by chunking)
+        if (isinstance(chunk, elements.CompositeElement)):
+            return (self._handle_composite_chunk(pdf_composite_chunk=chunk))
+        # Tables
+        elif ((chunk.category == 'Table') and isinstance(chunk, (elements.Table, elements.TableChunk))):
+            return(self._handle_table_chunk(pdf_table_chunk=chunk))
+        # Images
+        elif (any(True for chunk_info in ['image', 'image_base64', 'image_path'] if chunk_info in chunk.metadata.to_dict())):
+            return(self._handle_image_chunk(pdf_image_chunk=chunk))
+        # Text
+        else:
+            return(self._handle_text_chunk(pdf_text_chunk=chunk))
     
     
     def pdf_to_chunks(
         self, 
         pdf_file_path: Optional[str],
         pdf_file: Optional[IO[bytes]],
-    ) -> List:
+    ) -> List[elements.Element]:
         """
         Given the file path to a PDF, read it in with UnstructuredIO and return its elements.
         """
@@ -193,26 +398,36 @@ class UnstructuredPDFReader():
         pdf_chunks = partition_pdf(
             filename=pdf_file_path,
             file=pdf_file,
-            strategy="auto"  # auto: it decides, hi_res: detectron2, but issues with multi-column, ocr_only: pytesseract, fast: pdfminer
+            unique_element_ids=True,  # UUIDs that are unique for each element
+            strategy="hi_res",  # auto: it decides, hi_res: detectron2, but issues with multi-column, ocr_only: pytesseract, fast: pdfminer
+            hi_res_model_name='yolox',
+            include_page_breaks=False,
+            metadata_filename=pdf_file_path,
+            infer_table_structure=True,
+            extract_images_in_pdf=True,
+            extract_image_block_types=['Image', 'Table', 'Formula'],  # element types to save as images
+            extract_image_block_to_payload=False,  # needs to be false; we'll convert into base64 later.
+            extract_forms=False,  # not currently available
+            extract_image_block_output_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data/pdfimgs/')
         )
     
-        # 2. Check if it got good output.
-        pdf_read_in_okay = self.check_pdf_read_in(pdf_file_path=pdf_file_path, pdf_file=pdf_file, pdf_chunks=pdf_chunks)
-        if (pdf_read_in_okay):
-            return pdf_chunks
+        # # 2. Check if it got good output.
+        # pdf_read_in_okay = self.check_pdf_read_in(pdf_file_path=pdf_file_path, pdf_file=pdf_file, pdf_chunks=pdf_chunks)
+        # if (pdf_read_in_okay):
+        #     return pdf_chunks
     
-        # 3. Okay, PDF didn't read in well, so we'll use the back-up strategy
-        # According to Unstructured's Github: https://github.com/Unstructured-IO/unstructured/blob/main/unstructured/partition/pdf.py
-        # that is "OCR_ONLY" as opposed to "HI_RES".
-        pdf_chunks = partition_pdf(
-            filename=pdf_file_path,
-            file=pdf_file,
-            strategy="ocr_only"  # auto: it decides, hi_res: detectron2, but issues with multi-column, ocr_only: pytesseract, fast: pdfminer
-        )
+        # # 3. Okay, PDF didn't read in well, so we'll use the back-up strategy
+        # # According to Unstructured's Github: https://github.com/Unstructured-IO/unstructured/blob/main/unstructured/partition/pdf.py
+        # # that is "OCR_ONLY" as opposed to "HI_RES".
+        # pdf_chunks = partition_pdf(
+        #     filename=pdf_file_path,
+        #     file=pdf_file,
+        #     strategy="ocr_only"  # auto: it decides, hi_res: detectron2, but issues with multi-column, ocr_only: pytesseract, fast: pdfminer
+        # )
         return pdf_chunks
     
-    
-    def titlechunks_to_chunks(self, pdf_chunks: List) -> List[BaseNode]:
+
+    def chunks_to_nodes(self, pdf_chunks: List[elements.Element]) -> List[BaseNode]:
         """
         Given a PDF from Unstructured broken by header,
         convert them into nodes using the node_parser.
@@ -220,95 +435,73 @@ class UnstructuredPDFReader():
         """
         # 0. Setup.
         unstructured_chunk_nodes = []
+        
+        # Hash of node ID and index
+        node_id_to_index = {}
     
         # 1. Convert each page's text to Nodes.
-        for chunk in pdf_chunks:
-            # Get filename if there is one
-            filename = os.path.join(chunk.metadata.file_directory, chunk.metadata.filename) if (chunk.metadata.filename is not None) else ''
-            
-            new_node = TextNode(
-                text=chunk.text, id_=chunk.id,
-                metadata={
-                    'filename': filename,
-                    # 'coordinates': chunk.metadata.coordinates,
-                    'page number': chunk.metadata.page_number,
-                    # 'index number': '',
-                    # 'keywords': '', # node_keywords,
-                    # 'summary': '',
-                    # 'orignal_text': chunk.text,
-                    # 'window': '',
-                },
-                excluded_llm_metadata_keys=['filename', 'coordinates', 'chunk_number', 'window'],
-                excluded_embed_metadata_keys=['filename', 'coordinates', 'chunk_number', 'page number', 'original_text', 'window', 'keywords', 'summary']
-            )
+        for index, chunk in enumerate(pdf_chunks):
+            # Create new node based on node type
+            new_node = self._handle_chunk(chunk)
+
+            # Update hash of node ID and index
+            node_id_to_index[new_node.id_] = index
+
             # Add relationship to prior node
-            new_node.relationships[NodeRelationship.SOURCE] = RelatedNodeInfo(
-                node_id=chunk.id,
-                metadata={"filename": new_node.metadata['filename']}
-            )
             if (len(unstructured_chunk_nodes) > 0):
-                unstructured_chunk_nodes[-1].relationships[NodeRelationship.NEXT] = RelatedNodeInfo(
-                    node_id=new_node.node_id,
-                    metadata={"filename": new_node.metadata['filename']}
-                )
-                new_node.relationships[NodeRelationship.PREVIOUS] = RelatedNodeInfo(
-                    node_id=unstructured_chunk_nodes[-1].node_id,
-                    metadata={"filename": new_node.metadata['filename']}
-                )
+                unstructured_chunk_nodes[-1], new_node = self._node_rel_prev_next(prev_node=unstructured_chunk_nodes[-1], next_node=new_node)
+
+            # Add parent-child relationships for Title Chunks
+            if (chunk.metadata.parent_id is not None):
+                # Find the index of the parent node based on parent_id
+                parent_index = node_id_to_index[chunk.metadata.parent_id]
+                if (parent_index is not None):
+                    unstructured_chunk_nodes[parent_index], new_node = self._node_rel_parent_child(parent_node=unstructured_chunk_nodes[parent_index], child_node=new_node)
+
+            # Append to list
             unstructured_chunk_nodes.append(new_node)
+
+        del node_id_to_index
     
+        ## TODO: Move this chunk into a separate ReaderPostProcessor thing into PDFReaderUtils. Bundle in the sumamrization for tables and images into this.
         # 2. Node Parse each page to split when new information is different
         # NOTE: This was built for the Semantic Parser, but I guess we'll technically allow any parser here.
-        unstructured_parsed_nodes = self.node_parser.get_nodes_from_documents(unstructured_chunk_nodes)
+        # unstructured_parsed_nodes = self._node_parser.get_nodes_from_documents(unstructured_chunk_nodes)
     
         # 3. Node Attributes
-        for index, node in enumerate(unstructured_parsed_nodes):
-            # Keywords and Summary
-            node_keywords = ', '.join(pdfrutils.get_keywords(node.text, top_k=5))
-            # node_summary = get_t5_summary(node.text, summary_length=64)  # get_t5_summary
-            node.metadata['keywords'] = node_keywords
-            # node.metadata['summary'] = node_summary + (("\n" + node.metadata['summary']) if node.metadata['summary'] is not None else "")
+        # for index, node in enumerate(unstructured_parsed_nodes):
+        #     # Keywords and Summary
+        #     # node_keywords = ', '.join(pdfrutils.get_keywords(node.text, top_k=5))
+        #     # node_summary = get_t5_summary(node.text, summary_length=64)  # get_t5_summary
+        #     node.metadata['keywords'] = node_keywords
+        #     # node.metadata['summary'] = node_summary + (("\n" + node.metadata['summary']) if node.metadata['summary'] is not None else "")
     
-            # Get additional information about the node.
-            # Email: check for address.
-            info_types = []
-            if (pdfrutils.has_date(node.text)):
-                info_types.append("date")
-            if (pdfrutils.has_email(node.text)):
-                info_types.append("contact email")
-            if (pdfrutils.has_mail_addr(node.text)):
-                info_types.append("mailing postal address")
-            if (pdfrutils.has_phone(node.text)):
-                info_types.append("contact phone")
+        #     # Get additional information about the node.
+        #     # Email: check for address.
+        #     info_types = []
+        #     if (pdfrutils.has_date(node.text)):
+        #         info_types.append("date")
+        #     if (pdfrutils.has_email(node.text)):
+        #         info_types.append("contact email")
+        #     if (pdfrutils.has_mail_addr(node.text)):
+        #         info_types.append("mailing postal address")
+        #     if (pdfrutils.has_phone(node.text)):
+        #         info_types.append("contact phone")
     
-            node.metadata['information types'] = ", ".join(info_types)
-            
-            node.excluded_llm_metadata_keys = ['filename', 'coordinates', 'chunk_number', 'window', 'docreq_start', 'docreq_cosine', 'format_cosine', 'legal_cosine']
-            node.excluded_embed_metadata_keys = ['filename', 'coordinates', 'chunk_number', 'page number', 'original_text', 'window', 'keywords', 'summary', 'docreq_start', 'docreq_cosine', 'format_cosine', 'legal_cosine']
-            # Add embeddings
-            node_embedding = self.embed_model.get_text_embedding(
-                node.get_content(metadata_mode="embed")  # embed # llm
-            )
-            node.embedding = node_embedding
+        #     node.metadata['information types'] = ", ".join(info_types)
+            # node.excluded_llm_metadata_keys = ['filename', 'coordinates', 'chunk_number', 'window', 'orig_nodes']
+            # node.excluded_embed_metadata_keys = ['filename', 'coordinates', 'chunk_number', 'page number', 'original_text', 'window', 'keywords', 'summary', 'orig_nodes']
     
-            if (index > 0):
-                unstructured_parsed_nodes[index-1].relationships[NodeRelationship.NEXT] = RelatedNodeInfo(
-                    node_id=node.node_id,
-                    metadata={"filename": node.metadata['filename']}
-                )
-                node.relationships[NodeRelationship.PREVIOUS] = RelatedNodeInfo(
-                    node_id=unstructured_parsed_nodes[index-1].node_id,
-                    metadata={"filename": node.metadata['filename']}
-                )
-    
-        return(unstructured_parsed_nodes)
+            # if (index > 0):
+                # unstructured_parsed_nodes[index-1], node = self._node_rel_prev_next(unstructured_parsed_nodes[index-1], node)
+        return(unstructured_chunk_nodes)
 
     # """Main user-interaction function"""
     def load_data(
         self, 
         pdf_file_path: Optional[str] = None,
         pdf_file: Optional[IO[bytes]] = None
-    ) -> List[BaseNode]:
+    ) -> List: #[BaseNode]:
         """Given a path to a PDF file, load it with Unstructured and convert it into a list of Llamaindex Base Nodes.
         Input:
             - pdf_file_path (str): the path to the PDF file.
@@ -317,21 +510,27 @@ class UnstructuredPDFReader():
         """
         # 1. PDF to Chunks
         pdf_chunks = self.pdf_to_chunks(pdf_file_path=pdf_file_path, pdf_file=pdf_file)
+        # return (pdf_chunks)
+        
+        # Chunk processing
+        # pdf_chunks = clean_pdf_chunk, dedupe_title_chunks, combine_listitem_chunks, remove_header_footer_pagenum
+        
         # 2. Chunks to titles
         pdf_titlechunks = chunk_by_title(
-            pdf_chunks, 
-            max_characters=self.max_characters, 
-            new_after_n_chars=self.new_after_n_chars,
-            overlap=self.overlap, 
-            overlap_all=self.overlap_all, 
-            multipage_sections=self.multipage_sections,
-            # combine_text_under_n_chars=16
+            pdf_chunks,
+            max_characters=self._max_characters, 
+            new_after_n_chars=self._new_after_n_chars,
+            overlap=self._overlap, 
+            overlap_all=self._overlap_all,
+            multipage_sections=self._multipage_sections,
+            include_orig_elements=True,
+            combine_text_under_n_chars=self._new_after_n_chars
         )
         # 3. Cleaning
-        pdf_titlechunks = Parallel(n_jobs=max(int(os.cpu_count())-1, 1))(
-            delayed(self.clean_pdf_chunk)(chunk) for chunk in pdf_titlechunks
-        )
-        pdf_titlechunks = list(pdf_titlechunks)
+        # pdf_titlechunks = Parallel(n_jobs=max(int(os.cpu_count())-1, 1))(  # type: ignore
+        #     delayed(self.clean_pdf_chunk)(chunk) for chunk in pdf_chunks # pdf_titlechunks
+        # )
+        # pdf_titlechunks = list(pdf_titlechunks)
         # 4. Headlines to llamaindex nodes
-        parsed_chunks = self.titlechunks_to_chunks(pdf_titlechunks)
+        parsed_chunks = self.chunks_to_nodes(pdf_titlechunks)
         return (parsed_chunks)

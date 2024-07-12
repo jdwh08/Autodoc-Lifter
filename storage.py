@@ -28,7 +28,14 @@ from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from llama_index.core import VectorStoreIndex
 
+from llama_index.core.settings import Settings
+from llama_index.core.base.embeddings.base import BaseEmbedding
+from llama_index.core.node_parser import NodeParser
+
+# Reader and processing
 from pdf_reader import UnstructuredPDFReader
+from pdf_reader_utils import clean_pdf_chunk, dedupe_title_chunks, combine_listitem_chunks, UnstructuredPDFPostProcessor, RegexMetadataAdder, KeywordMetadataAdder, TextSummaryMetadataAdder, TableSummaryMetadataAdder, ImageSummaryMetadataAdder
+from pdf_reader_utils import DATE_REGEX, TIME_REGEX, EMAIL_REGEX, MAIL_ADDR_REGEX, PHONE_REGEX
 
 #####################################################
 # Get Vector Store
@@ -53,11 +60,14 @@ def get_docstore(documents: List) -> BaseDocumentStore:
 
 
 # Get storage context and 
-@st.cache_resource  # can't cache the pdf_reader or vector_store
+# @st.cache_resource  # can't cache the pdf_reader or vector_store
 def pdf_to_storage(
     pdf_file_path: Optional[str],
     pdf_file: Optional[IO[bytes]],
     _pdf_reader: UnstructuredPDFReader,
+    _embed_model: BaseEmbedding,
+    _node_parser: Optional[NodeParser] = None,
+    _pdf_postprocessor: Optional[UnstructuredPDFPostProcessor] = None,
     _vector_store: Optional[QdrantVectorStore]=None,
 ) -> Tuple[StorageContext, VectorStoreIndex]:
     """Read in PDF and save to storage."""
@@ -65,15 +75,38 @@ def pdf_to_storage(
     # Read the PDF with the PDF reader
     pdf_chunks = _pdf_reader.load_data(pdf_file_path=pdf_file_path, pdf_file=pdf_file)
 
+    # Clean the PDF chunks
+    # pdf_chunks = dedupe_title_chunks(pdf_chunks)
+    # pdf_chunks = combine_listitem_chunks(pdf_chunks)
+
+    # Postprocess the PDF nodes.
+    if (_node_parser is None):
+        _node_parser = Settings.node_parser
+        
+    # Combine by semantic headers
+    # pdf_chunks = chunk_by_header(pdf_chunks, _embed_model, 1000, True)
+    pdf_chunks = _node_parser.get_nodes_from_documents(pdf_chunks)
+
+    if (_pdf_postprocessor is not None):
+        pdf_chunks = _pdf_postprocessor(pdf_chunks)
+
+    # Add embeddings
+    pdf_chunks = _embed_model(pdf_chunks)
+
     # Create Document Store
     docstore = get_docstore(documents=pdf_chunks)
-    
+
     # Create Vector Store if not provided
     if (_vector_store is None):
         _vector_store = get_vector_store()
 
+    ## TODO: Handle images in StorageContext.
+
     # Save into Storage
-    storage_context = StorageContext.from_defaults(docstore=docstore, vector_store=_vector_store)
+    storage_context = StorageContext.from_defaults(
+        docstore=docstore, 
+        vector_store=_vector_store
+    )
     vector_store_index = VectorStoreIndex(
         pdf_chunks, storage_context=storage_context
     )

@@ -18,6 +18,7 @@
 
 #####################################################
 ## IMPORTS:
+import logging
 from typing import Dict, List, Any, Optional
 from treelib import Tree
 
@@ -87,6 +88,9 @@ from llama_index.core.instrumentation import get_dispatcher
 
 #####################################################
 ## Code
+
+logger = logging.getLogger(__name__)
+
 @st.cache_resource
 def get_callback_manager() -> CallbackManager:
     """Create the callback manager for the code."""
@@ -127,109 +131,109 @@ class RAGEventHandler(BaseEventHandler):
         """Class name."""
         return "RAGEventHandler"
 
-    def _print_event_nodes(event_nodes: List) -> str:
+    def _print_event_nodes(self, event_nodes: List) -> str:
         """Print a list of nodes nicely."""
         output_str = "["
         for node in event_nodes:
-            output_str += (display_source_node(node, 1000) + "\n")
+            output_str += (str(display_source_node(node, 1000)) + "\n")
             output_str += "* * * * * * * * * * * *"
         output_str += "]"
         return (output_str)
 
     def handle(self, event: BaseEvent) -> None:
         """Logic for handling event."""
-        print("-----------------------")
+        logger.info("-----------------------")
         # all events have these attributes
-        print(event.id_)
-        print(event.timestamp)
-        print(event.span_id)
+        logger.info(event.id_)
+        logger.info(event.timestamp)
+        logger.info(event.span_id)
 
         # event specific attributes
-        print(f"Event type: {event.class_name()}")
+        logger.info(f"Event type: {event.class_name()}")
         if isinstance(event, AgentRunStepStartEvent):
-            print(event.task_id)
-            print(event.step)
-            print(event.input)
+            logger.info(event.task_id)
+            logger.info(event.step)
+            logger.info(event.input)
         if isinstance(event, AgentRunStepEndEvent):
-            print(event.step_output)
+            logger.info(event.step_output)
         if isinstance(event, AgentChatWithStepStartEvent):
-            print(event.user_msg)
+            logger.info(event.user_msg)
         if isinstance(event, AgentChatWithStepEndEvent):
-            print(event.response)
+            logger.info(event.response)
         if isinstance(event, AgentToolCallEvent):
-            print(event.arguments)
-            print(event.tool.name)
-            print(event.tool.description)
-            print(event.tool.to_openai_tool())
+            logger.info(event.arguments)
+            logger.info(event.tool.name)
+            logger.info(event.tool.description)
+            logger.info(event.tool.to_openai_tool())
         if isinstance(event, StreamChatDeltaReceivedEvent):
-            print(event.delta)
+            logger.info(event.delta)
         if isinstance(event, StreamChatErrorEvent):
-            print(event.exception)
+            logger.info(event.exception)
         if isinstance(event, EmbeddingStartEvent):
-            print(event.model_dict)
+            logger.info(event.model_dict)
         if isinstance(event, EmbeddingEndEvent):
-            print(event.chunks)
-            print(event.embeddings[0][:5])  # avoid printing all embeddings
+            logger.info(event.chunks)
+            logger.info(event.embeddings[0][:5])  # avoid printing all embeddings
         if isinstance(event, LLMPredictStartEvent):
-            print(event.template)
-            print(event.template_args)
+            logger.info(event.template)
+            logger.info(event.template_args)
         if isinstance(event, LLMPredictEndEvent):
-            print(event.output)
+            logger.info(event.output)
         if isinstance(event, LLMStructuredPredictStartEvent):
-            print(event.template)
-            print(event.template_args)
-            print(event.output_cls)
+            logger.info(event.template)
+            logger.info(event.template_args)
+            logger.info(event.output_cls)
         if isinstance(event, LLMStructuredPredictEndEvent):
-            print(event.output)
+            logger.info(event.output)
         if isinstance(event, LLMCompletionStartEvent):
-            print(event.model_dict)
-            print(event.prompt)
-            print(event.additional_kwargs)
+            logger.info(event.model_dict)
+            logger.info(event.prompt)
+            logger.info(event.additional_kwargs)
         if isinstance(event, LLMCompletionEndEvent):
-            print(event.response)
-            print(event.prompt)
+            logger.info(event.response)
+            logger.info(event.prompt)
         if isinstance(event, LLMChatInProgressEvent):
-            print(event.messages)
-            print(event.response)
+            logger.info(event.messages)
+            logger.info(event.response)
         if isinstance(event, LLMChatStartEvent):
-            print(event.messages)
-            print(event.additional_kwargs)
-            print(event.model_dict)
+            logger.info(event.messages)
+            logger.info(event.additional_kwargs)
+            logger.info(event.model_dict)
         if isinstance(event, LLMChatEndEvent):
-            print(event.messages)
-            print(event.response)
+            logger.info(event.messages)
+            logger.info(event.response)
         if isinstance(event, RetrievalStartEvent):
-            print(event.str_or_query_bundle)
+            logger.info(event.str_or_query_bundle)
         if isinstance(event, RetrievalEndEvent):
-            print(event.str_or_query_bundle)
-            # print(event.nodes)
-            print(_print_event_nodes(event.nodes))
+            logger.info(event.str_or_query_bundle)
+            # logger.info(event.nodes)
+            logger.info(self._print_event_nodes(event.nodes))
         if isinstance(event, ReRankStartEvent):
-            print(event.query)
-            # print(event.nodes)
+            logger.info(event.query)
+            # logger.info(event.nodes)
             for node in event.nodes:
-                print(display_source_node(node))
-            print(event.top_n)
-            print(event.model_name)
+                logger.info(display_source_node(node))
+            logger.info(event.top_n)
+            logger.info(event.model_name)
         if isinstance(event, ReRankEndEvent):
-            # print(event.nodes)
-            print(_print_event_nodes(event.nodes))
+            # logger.info(event.nodes)
+            logger.info(self._print_event_nodes(event.nodes))
         if isinstance(event, QueryStartEvent):
-            print(event.query)
+            logger.info(event.query)
         if isinstance(event, QueryEndEvent):
-            print(event.response)
-            print(event.query)
+            logger.info(event.response)
+            logger.info(event.query)
         if isinstance(event, SpanDropEvent):
-            print(event.err_str)
+            logger.info(event.err_str)
         if isinstance(event, SynthesizeStartEvent):
-            print(event.query)
+            logger.info(event.query)
         if isinstance(event, SynthesizeEndEvent):
-            print(event.response)
-            print(event.query)
+            logger.info(event.response)
+            logger.info(event.query)
         if isinstance(event, GetResponseStartEvent):
-            print(event.query_str)
+            logger.info(event.query_str)
         self.events.append(event)
-        print("-----------------------")
+        logger.info("-----------------------")
         return (None)
 
     def _get_events_by_span(self) -> Dict[str, List[BaseEvent]]:
@@ -237,7 +241,7 @@ class RAGEventHandler(BaseEventHandler):
         for event in self.events:
             if event.span_id in events_by_span:
                 events_by_span[event.span_id].append(event)
-            else:
+            elif (event.span_id is not None):
                 events_by_span[event.span_id] = [event]
         return events_by_span
 
@@ -270,12 +274,12 @@ class RAGEventHandler(BaseEventHandler):
         """Method for viewing trace trees."""
         trees = self._get_event_span_trees()
         for tree in trees:
-            print(
+            logger.info(
                 tree.show(
                     stdout=False, sorting=True, key=lambda node: node.data
                 )
             )
-            print("")
+            logger.info("")
         return (None)
 
 

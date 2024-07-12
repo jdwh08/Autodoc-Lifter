@@ -19,10 +19,19 @@
 
 #####################################################
 ## IMPORTS
-import streamlit as st
+from typing import Optional, Callable, List, Any
 
+import streamlit as st
+from streamlit import session_state as ss
+
+from wtpsplit import SaT
+
+from llama_index.core import Settings
 from llama_index.core.node_parser.interface import NodeParser
 
+from llama_index.core.callbacks import CallbackManager
+
+from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.node_parser import SemanticSplitterNodeParser, SentenceWindowNodeParser
 
@@ -30,16 +39,47 @@ from llama_index.core.node_parser import SemanticSplitterNodeParser, SentenceWin
 
 #####################################################
 ## CODE
+def sentence_splitter_from_SaT(model: Optional[SaT]) -> Callable[[str], List[str]]:
+    """Convert a SaT model into a sentence splitter function.
+
+    Args:
+        model (SaT): The Segment Anything model.
+
+    Returns:
+        Callable[[str], List[str]]: The sentence splitting function using the SaT model.
+    """
+    model = model or ss.model
+    if model is None:
+        raise ValueError("Sentence splitting model is not set.")
+    
+    def sentence_splitter(text: str) -> List[str]:
+        segments = model.split(text_or_texts=text)
+        if isinstance(segments, list):
+            return segments
+        else:
+            return list(segments)  # type: ignore (generator is the other option?)
+    
+    return (sentence_splitter)
+
 # @st.cache_resource  # can't cache because embed_model is not hashable.
-def get_parser(embed_model: HuggingFaceEmbedding) -> NodeParser:
+def get_parser(
+        embed_model: BaseEmbedding,
+        sentence_model: Optional[SaT] = None,
+        sentence_splitter: Optional[Callable[[str], List[str]]] = None,
+        callback_manager: Optional[CallbackManager] = None
+    ) -> NodeParser:
     """Main parser to use throughout the RAG document processing."""
-    semantic_parser = SemanticSplitterNodeParser(
-        buffer_size=3,
-        breakpoint_percentile_threshold=93,
+    if (sentence_model is not None) and (sentence_splitter is not None):
+        sentence_splitter = sentence_splitter_from_SaT(sentence_model)
+    
+    parser = SemanticSplitterNodeParser.from_defaults(
         embed_model=embed_model,
-        # sentence_splitter=_sentence_splitter,
+        breakpoint_percentile_threshold=93,
+        buffer_size=3,
+        sentence_splitter=sentence_splitter,
+        callback_manager=callback_manager or Settings.callback_manager,
     )
-    return (semantic_parser)
+    return (parser)
 
 
 # @st.cache_resource
