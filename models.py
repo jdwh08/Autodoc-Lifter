@@ -162,7 +162,7 @@ def _get_llamacpp_llm(
 
 
 def _get_hf_llm(
-    model_path: str = "/home/jwang15/ace-shared/ml-models/hface/meta-llama_Meta-Llama-3-8B-Instruct",
+    model_path: str,
     model_seed: int = 31415926,
     model_temperature: float = 0,  # ideally 0, but HF-type doesn't allow that. # a good dev might use sys.float_info()['min'] to confirm (?)
     model_context_length: Optional[int] = 8192,
@@ -260,386 +260,386 @@ DEFAULT_HF_MULTIMODAL_LLM = 'microsoft/Phi-3-vision-128k-instruct'
 DEFAULT_HF_MULTIMODAL_CONTEXT_WINDOW = 500
 DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS = 1000
 
-class HuggingFaceMultiModalLLM(MultiModalLLM):
-    model_name: str = Field(
-        description='The multi-modal huggingface LLM to use. Currently only using Phi3.',
-        default=DEFAULT_HF_MULTIMODAL_LLM
-    )
-    context_window: int = Field(
-        default=DEFAULT_HF_MULTIMODAL_CONTEXT_WINDOW,
-        description="The maximum number of tokens available for input.",
-        gt=0,
-    )
-    max_new_tokens: int = Field(
-        default=DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS,
-        description="The maximum number of tokens to generate.",
-        gt=0,
-    )
-    system_prompt: str = Field(
-        default="",
-        description=(
-            "The system prompt, containing any extra instructions or context. "
-            "The model card on HuggingFace should specify if this is needed."
-        ),
-    )
-    query_wrapper_prompt: PromptTemplate = Field(
-        default=PromptTemplate("{query_str}"),
-        description=(
-            "The query wrapper prompt, containing the query placeholder. "
-            "The model card on HuggingFace should specify if this is needed. "
-            "Should contain a `{query_str}` placeholder."
-        ),
-    )
-    processor_name: str = Field(
-        default=DEFAULT_HF_MULTIMODAL_LLM,
-        description=(
-            "The name of the processor to use from HuggingFace. "
-            "Unused if `processor` is passed in directly."
-        ),
-    )
-    device_map: str = Field(
-        default="auto", description="The device_map to use. Defaults to 'auto'."
-    )
-    stopping_ids: List[int] = Field(
-        default_factory=list,
-        description=(
-            "The stopping ids to use. "
-            "Generation stops when these token IDs are predicted."
-        ),
-    )
-    tokenizer_outputs_to_remove: list = Field(
-        default_factory=list,
-        description=(
-            "The outputs to remove from the tokenizer. "
-            "Sometimes huggingface tokenizers return extra inputs that cause errors."
-        ),
-    )
-    processor_kwargs: dict = Field(
-        default_factory=dict, description="The kwargs to pass to the processor."
-    )
-    model_kwargs: dict = Field(
-        default_factory=dict,
-        description="The kwargs to pass to the model during initialization.",
-    )
-    generate_kwargs: dict = Field(
-        default_factory=dict,
-        description="The kwargs to pass to the model during generation.",
-    )
-    is_chat_model: bool = Field(
-        default=False,
-        description=(
-            "Whether the model can have multiple messages passed at once, like the OpenAI chat API. This is almost certainly no."
-            # LLMMetadata.__fields__["is_chat_model"].field_info.description
-            # + " Be sure to verify that you either pass an appropriate tokenizer "
-            # "that can convert prompts to properly formatted chat messages or a "
-            # "`messages_to_prompt` that does so."
-        ),
-    )
+# class HuggingFaceMultiModalLLM(MultiModalLLM):
+#     model_name: str = Field(
+#         description='The multi-modal huggingface LLM to use. Currently only using Phi3.',
+#         default=DEFAULT_HF_MULTIMODAL_LLM
+#     )
+#     context_window: int = Field(
+#         default=DEFAULT_HF_MULTIMODAL_CONTEXT_WINDOW,
+#         description="The maximum number of tokens available for input.",
+#         gt=0,
+#     )
+#     max_new_tokens: int = Field(
+#         default=DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS,
+#         description="The maximum number of tokens to generate.",
+#         gt=0,
+#     )
+#     system_prompt: str = Field(
+#         default="",
+#         description=(
+#             "The system prompt, containing any extra instructions or context. "
+#             "The model card on HuggingFace should specify if this is needed."
+#         ),
+#     )
+#     query_wrapper_prompt: PromptTemplate = Field(
+#         default=PromptTemplate("{query_str}"),
+#         description=(
+#             "The query wrapper prompt, containing the query placeholder. "
+#             "The model card on HuggingFace should specify if this is needed. "
+#             "Should contain a `{query_str}` placeholder."
+#         ),
+#     )
+#     processor_name: str = Field(
+#         default=DEFAULT_HF_MULTIMODAL_LLM,
+#         description=(
+#             "The name of the processor to use from HuggingFace. "
+#             "Unused if `processor` is passed in directly."
+#         ),
+#     )
+#     device_map: str = Field(
+#         default="auto", description="The device_map to use. Defaults to 'auto'."
+#     )
+#     stopping_ids: List[int] = Field(
+#         default_factory=list,
+#         description=(
+#             "The stopping ids to use. "
+#             "Generation stops when these token IDs are predicted."
+#         ),
+#     )
+#     tokenizer_outputs_to_remove: list = Field(
+#         default_factory=list,
+#         description=(
+#             "The outputs to remove from the tokenizer. "
+#             "Sometimes huggingface tokenizers return extra inputs that cause errors."
+#         ),
+#     )
+#     processor_kwargs: dict = Field(
+#         default_factory=dict, description="The kwargs to pass to the processor."
+#     )
+#     model_kwargs: dict = Field(
+#         default_factory=dict,
+#         description="The kwargs to pass to the model during initialization.",
+#     )
+#     generate_kwargs: dict = Field(
+#         default_factory=dict,
+#         description="The kwargs to pass to the model during generation.",
+#     )
+#     is_chat_model: bool = Field(
+#         default=False,
+#         description=(
+#             "Whether the model can have multiple messages passed at once, like the OpenAI chat API. This is almost certainly no."
+#             # LLMMetadata.__fields__["is_chat_model"].field_info.description
+#             # + " Be sure to verify that you either pass an appropriate tokenizer "
+#             # "that can convert prompts to properly formatted chat messages or a "
+#             # "`messages_to_prompt` that does so."
+#         ),
+#     )
     
-    _model: AutoModelForCausalLM = PrivateAttr()
-    _processor: AutoProcessor = PrivateAttr()
-    _stopping_criteria: Any = PrivateAttr()
+#     _model: AutoModelForCausalLM = PrivateAttr()
+#     _processor: AutoProcessor = PrivateAttr()
+#     _stopping_criteria: Any = PrivateAttr()
 
-    def __init__(
-        self, 
-        context_window: int = DEFAULT_HF_MULTIMODAL_CONTEXT_WINDOW,
-        max_new_tokens: int = DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS,
-        query_wrapper_prompt: Union[str, PromptTemplate] = "{query_str}",
-        processor_name: str = DEFAULT_HF_MULTIMODAL_LLM,
-        model_name: str = DEFAULT_HF_MULTIMODAL_LLM,
-        model: Optional[AutoModelForCausalLM] = None,
-        processor: Optional[AutoProcessor] = None,
-        device_map: str = 'auto',
-        stopping_ids: Optional[List[int]] = None,
-        processor_kwargs: Optional[dict] = {},
-        tokenizer_outputs_to_remove: Optional[list]= None,
-        model_kwargs: Optional[dict] = {},
-        generate_kwargs: Optional[dict] = {},
-        is_chat_model: Optional[bool] = False,
-        callback_manager: Optional[CallbackManager] = None,
-        system_prompt: str = "",
-        messages_to_prompt: Optional[Callable[[Sequence[ChatMessage], int], str]] = None,
-        completion_to_prompt: Optional[Callable[[str], str]] = None,
-        pydantic_program_mode: PydanticProgramMode = PydanticProgramMode.DEFAULT,
-        output_parser: Optional[BaseOutputParser] = None,
-    ) -> None:
-        self._model = model or AutoModelForCausalLM.from_pretrained(
-            model_name,
-            device_map=device_map,
-            trust_remote_code=True,
-            **model_kwargs
-        )
+#     def __init__(
+#         self, 
+#         context_window: int = DEFAULT_HF_MULTIMODAL_CONTEXT_WINDOW,
+#         max_new_tokens: int = DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS,
+#         query_wrapper_prompt: Union[str, PromptTemplate] = "{query_str}",
+#         processor_name: str = DEFAULT_HF_MULTIMODAL_LLM,
+#         model_name: str = DEFAULT_HF_MULTIMODAL_LLM,
+#         model: Optional[AutoModelForCausalLM] = None,
+#         processor: Optional[AutoProcessor] = None,
+#         device_map: str = 'auto',
+#         stopping_ids: Optional[List[int]] = None,
+#         processor_kwargs: Optional[dict] = {},
+#         tokenizer_outputs_to_remove: Optional[list]= None,
+#         model_kwargs: Optional[dict] = {},
+#         generate_kwargs: Optional[dict] = {},
+#         is_chat_model: Optional[bool] = False,
+#         callback_manager: Optional[CallbackManager] = None,
+#         system_prompt: str = "",
+#         messages_to_prompt: Optional[Callable[[Sequence[ChatMessage], int], str]] = None,
+#         completion_to_prompt: Optional[Callable[[str], str]] = None,
+#         pydantic_program_mode: PydanticProgramMode = PydanticProgramMode.DEFAULT,
+#         output_parser: Optional[BaseOutputParser] = None,
+#     ) -> None:
+#         self._model = model or AutoModelForCausalLM.from_pretrained(
+#             model_name,
+#             device_map=device_map,
+#             trust_remote_code=True,
+#             **model_kwargs
+#         )
         
-        # check context_window
-        config_dict = self._model.config.to_dict()
-        model_context_window = int(
-            config_dict.get("max_position_embeddings", context_window)
-        )
-        if ((model_context_window is not None) and (model_context_window < context_window)):
-            logger.warning(
-                f"Supplied context_window {context_window} is greater "
-                f"than the model's max input size {model_context_window}. "
-                "Disable this warning by setting a lower context_window."
-            )
-            context_window = model_context_window
+#         # check context_window
+#         config_dict = self._model.config.to_dict()
+#         model_context_window = int(
+#             config_dict.get("max_position_embeddings", context_window)
+#         )
+#         if ((model_context_window is not None) and (model_context_window < context_window)):
+#             logger.warning(
+#                 f"Supplied context_window {context_window} is greater "
+#                 f"than the model's max input size {model_context_window}. "
+#                 "Disable this warning by setting a lower context_window."
+#             )
+#             context_window = model_context_window
         
-        if ((processor_kwargs is None) or ("max_length" not in processor_kwargs)):
-            processor_kwargs = processor_kwargs or {}
-            processor_kwargs["max_length"] = context_window
+#         if ((processor_kwargs is None) or ("max_length" not in processor_kwargs)):
+#             processor_kwargs = processor_kwargs or {}
+#             processor_kwargs["max_length"] = context_window
 
-        self._processor = processor or AutoProcessor.from_pretrained(
-            processor_name or model_name,
-            trust_remote_code=True,
-            **processor_kwargs
-        )
+#         self._processor = processor or AutoProcessor.from_pretrained(
+#             processor_name or model_name,
+#             trust_remote_code=True,
+#             **processor_kwargs
+#         )
 
-        # Processor-Model disagreement
-        if (self._processor.tokenizer.name_or_path != model_name):
-            logger.warning(
-                f"The model `{model_name}` and processor `{self._processor.tokenizer.name_or_path}` "
-                f"are different, please ensure that they are compatible."
-            )
+#         # Processor-Model disagreement
+#         if (self._processor.tokenizer.name_or_path != model_name):
+#             logger.warning(
+#                 f"The model `{model_name}` and processor `{self._processor.tokenizer.name_or_path}` "
+#                 f"are different, please ensure that they are compatible."
+#             )
         
-        # setup stopping criteria
-        stopping_ids_list = stopping_ids or []
+#         # setup stopping criteria
+#         stopping_ids_list = stopping_ids or []
 
-        class StopOnTokens(StoppingCriteria):
-            def __call__(
-                self,
-                input_ids: torch.LongTensor,
-                scores: torch.FloatTensor,
-                **kwargs: Any,
-            ) -> bool:
-                for stop_id in stopping_ids_list:
-                    if input_ids[0][-1] == stop_id:
-                        return True
-                return False
+#         class StopOnTokens(StoppingCriteria):
+#             def __call__(
+#                 self,
+#                 input_ids: torch.LongTensor,
+#                 scores: torch.FloatTensor,
+#                 **kwargs: Any,
+#             ) -> bool:
+#                 for stop_id in stopping_ids_list:
+#                     if input_ids[0][-1] == stop_id:
+#                         return True
+#                 return False
 
-        self._stopping_criteria = StoppingCriteriaList([StopOnTokens()])
+#         self._stopping_criteria = StoppingCriteriaList([StopOnTokens()])
 
-        if isinstance(query_wrapper_prompt, str):
-            query_wrapper_prompt = PromptTemplate(query_wrapper_prompt)
+#         if isinstance(query_wrapper_prompt, str):
+#             query_wrapper_prompt = PromptTemplate(query_wrapper_prompt)
 
-        messages_to_prompt = messages_to_prompt or self._messages_to_prompt
+#         messages_to_prompt = messages_to_prompt or self._messages_to_prompt
         
-        super().__init__(
-            context_window=context_window,
-            max_new_tokens=max_new_tokens,
-            query_wrapper_prompt=query_wrapper_prompt,
-            tokenizer_name=processor_name,
-            model_name=model_name,
-            device_map=device_map,
-            stopping_ids=stopping_ids or [],
-            tokenizer_kwargs=processor_kwargs or {},
-            tokenizer_outputs_to_remove=tokenizer_outputs_to_remove or [],
-            model_kwargs=model_kwargs or {},
-            generate_kwargs=generate_kwargs or {},
-            is_chat_model=is_chat_model,
-            callback_manager=callback_manager,
-            system_prompt=system_prompt,
-            messages_to_prompt=messages_to_prompt,
-            completion_to_prompt=completion_to_prompt,
-            pydantic_program_mode=pydantic_program_mode,
-            output_parser=output_parser,
-        )
-        return (None)
+#         super().__init__(
+#             context_window=context_window,
+#             max_new_tokens=max_new_tokens,
+#             query_wrapper_prompt=query_wrapper_prompt,
+#             tokenizer_name=processor_name,
+#             model_name=model_name,
+#             device_map=device_map,
+#             stopping_ids=stopping_ids or [],
+#             tokenizer_kwargs=processor_kwargs or {},
+#             tokenizer_outputs_to_remove=tokenizer_outputs_to_remove or [],
+#             model_kwargs=model_kwargs or {},
+#             generate_kwargs=generate_kwargs or {},
+#             is_chat_model=is_chat_model,
+#             callback_manager=callback_manager,
+#             system_prompt=system_prompt,
+#             messages_to_prompt=messages_to_prompt,
+#             completion_to_prompt=completion_to_prompt,
+#             pydantic_program_mode=pydantic_program_mode,
+#             output_parser=output_parser,
+#         )
+#         return (None)
 
-    @classmethod
-    def class_name(cls) -> str:
-        return "HuggingFace_MultiModal_LLM"
+#     @classmethod
+#     def class_name(cls) -> str:
+#         return "HuggingFace_MultiModal_LLM"
 
-    @property
-    def metadata(self) -> LLMMetadata:
-        """LLM metadata."""
-        return LLMMetadata(
-            context_window=self.context_window,
-            num_output=self.max_new_tokens,
-            model_name=self.model_name,
-            is_chat_model=self.is_chat_model,
-        )
+#     @property
+#     def metadata(self) -> LLMMetadata:
+#         """LLM metadata."""
+#         return LLMMetadata(
+#             context_window=self.context_window,
+#             num_output=self.max_new_tokens,
+#             model_name=self.model_name,
+#             is_chat_model=self.is_chat_model,
+#         )
     
-    def _message_to_prompt(self, message: str, num_images: int) -> str:
-        ### TODO: Make this work generically, not just for Phi-3.
-        """Converts a list of messages into a prompt for Phi-3, handling the image placeholder tags.
-        NOTE: we assume for simplicity here that these images are related, and not the user bouncing between multiple different topics. Thus, we send them all at once.
+#     def _message_to_prompt(self, message: str, num_images: int) -> str:
+#         ### TODO: Make this work generically, not just for Phi-3.
+#         """Converts a list of messages into a prompt for Phi-3, handling the image placeholder tags.
+#         NOTE: we assume for simplicity here that these images are related, and not the user bouncing between multiple different topics. Thus, we send them all at once.
 
-        Args:
-            messages (List[dict]): A list of the messages to convert, where each message is a dict containing the message role and content.
-            num_images (int): The number of images the user is passing to the MultiModalLLM.
-        Returns:
-            str: The prompt for Phi-3.
-        """
-        # For simplicity, we will send all images the first time the user speaks in the conversation.
-        message_with_images = ""
-        for image_index in range(1, num_images+1):
-            message_with_images += f"<|image_{image_index}|>\n"
-        message_with_images += message
-        messages_list = [
-            {'role': 'user', 'content': message_with_images}
-        ]
-        prompt = self._processor.tokenizer.apply_chat_template(messages_list, tokenize=False, add_generation_prompt=True)  # type: ignore
-        # need to remove last <|endoftext|> if it is there, which is used for training, not inference. For training, make sure to add <|endoftext|> in the end.
-        if prompt.endswith("<|endoftext|>"):
-            prompt = prompt.rstrip("<|endoftext|>")
-        return (prompt)
-
-    
-    def _messages_to_prompt(self, messages: Sequence[ChatMessage], num_images: int) -> str:
-        ### TODO: Make this work generically, not just for Phi-3.
-        """Converts a list of messages into a prompt for Phi-3, handling the image placeholder tags.
-        NOTE: we assume for simplicity here that these images are related, and not the user bouncing between multiple different topics. Thus, we send them all at once.
-
-        Args:
-            messages (List[dict]): A list of the messages to convert, where each message is a dict containing the message role and content.
-            num_images (int): The number of images the user is passing to the MultiModalLLM.
-        Returns:
-            str: The prompt for Phi-3.
-        """
-        # For simplicity, we will send all images the first time the user speaks in the conversation.
-        image_placeholders = ""
-        for image_index in range(1, num_images+1):
-            image_placeholders += f"<|image_{image_index}|>\n"
-
-        messages_dict = [
-            {"role": message.role.value, "content": message.content}
-            for message in messages
-        ]
-
-        # NOTE: We add the image placeholders to the first user-provided chat message.
-        def _get_first_user_message_index(messages_dict: List[Dict]) -> Optional[int]:
-            """Get the index of the first user message in the message list"""
-            for index, message in enumerate(messages):
-                if (message['role'] == MessageRole.USER):
-                    return (index)
-            return (None)
-
-        first_user_message_index = _get_first_user_message_index(messages_dict)
-        messages_dict[first_user_message_index]['content'] = image_placeholders + messages_dict[first_user_message_index]['content']
-        
-        prompt = self._processor.tokenizer.apply_chat_template(messages_list, tokenize=False, add_generation_prompt=True)  # type: ignore
-        # need to remove last <|endoftext|> if it is there, which is used for training, not inference. For training, make sure to add <|endoftext|> in the end.
-        if prompt.endswith("<|endoftext|>"):
-            prompt = prompt.rstrip("<|endoftext|>")
-        return (prompt)
+#         Args:
+#             messages (List[dict]): A list of the messages to convert, where each message is a dict containing the message role and content.
+#             num_images (int): The number of images the user is passing to the MultiModalLLM.
+#         Returns:
+#             str: The prompt for Phi-3.
+#         """
+#         # For simplicity, we will send all images the first time the user speaks in the conversation.
+#         message_with_images = ""
+#         for image_index in range(1, num_images+1):
+#             message_with_images += f"<|image_{image_index}|>\n"
+#         message_with_images += message
+#         messages_list = [
+#             {'role': 'user', 'content': message_with_images}
+#         ]
+#         prompt = self._processor.tokenizer.apply_chat_template(messages_list, tokenize=False, add_generation_prompt=True)  # type: ignore
+#         # need to remove last <|endoftext|> if it is there, which is used for training, not inference. For training, make sure to add <|endoftext|> in the end.
+#         if prompt.endswith("<|endoftext|>"):
+#             prompt = prompt.rstrip("<|endoftext|>")
+#         return (prompt)
 
     
-    @llm_completion_callback()
-    def complete(
-        self,
-        prompt: str,
-        image_documents: ImageNode | List[ImageNode],  # this also takes ImageDocument which inherits from ImageNode.
-        formatted: bool = False,
-        **kwargs: Any
-    ) -> CompletionResponse:
-        """Given a prompt and image node(s), get the Phi-3 Vision prompt"""
+#     def _messages_to_prompt(self, messages: Sequence[ChatMessage], num_images: int) -> str:
+#         ### TODO: Make this work generically, not just for Phi-3.
+#         """Converts a list of messages into a prompt for Phi-3, handling the image placeholder tags.
+#         NOTE: we assume for simplicity here that these images are related, and not the user bouncing between multiple different topics. Thus, we send them all at once.
+
+#         Args:
+#             messages (List[dict]): A list of the messages to convert, where each message is a dict containing the message role and content.
+#             num_images (int): The number of images the user is passing to the MultiModalLLM.
+#         Returns:
+#             str: The prompt for Phi-3.
+#         """
+#         # For simplicity, we will send all images the first time the user speaks in the conversation.
+#         image_placeholders = ""
+#         for image_index in range(1, num_images+1):
+#             image_placeholders += f"<|image_{image_index}|>\n"
+
+#         messages_dict = [
+#             {"role": message.role.value, "content": message.content}
+#             for message in messages
+#         ]
+
+#         # NOTE: We add the image placeholders to the first user-provided chat message.
+#         def _get_first_user_message_index(messages_dict: List[Dict]) -> Optional[int]:
+#             """Get the index of the first user message in the message list"""
+#             for index, message in enumerate(messages):
+#                 if (message['role'] == MessageRole.USER):
+#                     return (index)
+#             return (None)
+
+#         first_user_message_index = _get_first_user_message_index(messages_dict)
+#         messages_dict[first_user_message_index]['content'] = image_placeholders + messages_dict[first_user_message_index]['content']
         
-        # Handle images input
-        image_list = []
-        if (not isinstance(image_documents, list)):
-            image_documents = [image_documents]
+#         prompt = self._processor.tokenizer.apply_chat_template(messages_list, tokenize=False, add_generation_prompt=True)  # type: ignore
+#         # need to remove last <|endoftext|> if it is there, which is used for training, not inference. For training, make sure to add <|endoftext|> in the end.
+#         if prompt.endswith("<|endoftext|>"):
+#             prompt = prompt.rstrip("<|endoftext|>")
+#         return (prompt)
+
+    
+#     @llm_completion_callback()
+#     def complete(
+#         self,
+#         prompt: str,
+#         image_documents: ImageNode | List[ImageNode],  # this also takes ImageDocument which inherits from ImageNode.
+#         formatted: bool = False,
+#         **kwargs: Any
+#     ) -> CompletionResponse:
+#         """Given a prompt and image node(s), get the Phi-3 Vision prompt"""
         
-        # Convert input images into PIL images for the model.
-        for image in image_documents:
-            # NOTE: ImageDocument inherets from ImageNode. We'll go extract the image.
-            image_io = image.resolve_image()
-            image_pil = PILImage.open(image_io)
-            image_list.append(image_pil)
+#         # Handle images input
+#         image_list = []
+#         if (not isinstance(image_documents, list)):
+#             image_documents = [image_documents]
         
-        num_images = len(image_list)
+#         # Convert input images into PIL images for the model.
+#         for image in image_documents:
+#             # NOTE: ImageDocument inherets from ImageNode. We'll go extract the image.
+#             image_io = image.resolve_image()
+#             image_pil = PILImage.open(image_io)
+#             image_list.append(image_pil)
         
-        # Get the prompt
-        prompt = self._message_to_prompt(prompt, num_images)
+#         num_images = len(image_list)
+        
+#         # Get the prompt
+#         prompt = self._message_to_prompt(prompt, num_images)
 
-        full_prompt = prompt
-        if not formatted:
-            if self.query_wrapper_prompt:
-                full_prompt = self.query_wrapper_prompt.format(query_str=prompt)
-            if self.system_prompt:
-                full_prompt = f"{self.system_prompt} {full_prompt}"
+#         full_prompt = prompt
+#         if not formatted:
+#             if self.query_wrapper_prompt:
+#                 full_prompt = self.query_wrapper_prompt.format(query_str=prompt)
+#             if self.system_prompt:
+#                 full_prompt = f"{self.system_prompt} {full_prompt}"
 
-        # Get the model input
-        model_inputs = self._processor(prompt, image_list, return_tensors="pt").to(self._model.device)
-        gc.collect()
-        torch.cuda.empty_cache()
+#         # Get the model input
+#         model_inputs = self._processor(prompt, image_list, return_tensors="pt").to(self._model.device)
+#         gc.collect()
+#         torch.cuda.empty_cache()
 
-        # remove keys from the tokenizer if needed, to avoid HF errors
-        for key in self.tokenizer_outputs_to_remove:
-            if key in model_inputs:
-                model_inputs.pop(key, None)
+#         # remove keys from the tokenizer if needed, to avoid HF errors
+#         for key in self.tokenizer_outputs_to_remove:
+#             if key in model_inputs:
+#                 model_inputs.pop(key, None)
 
-        # Get output
-        tokens = self._model.generate(
-            **model_inputs, 
-            max_new_tokens=self.max_new_tokens,
-            stopping_criteria=self._stopping_criteria,
-            eos_token_id=self._processor.tokenizer.eos_token_id,
-            **self.generate_kwargs
-        )
-        gc.collect()
-        torch.cuda.empty_cache()
+#         # Get output
+#         tokens = self._model.generate(
+#             **model_inputs, 
+#             max_new_tokens=self.max_new_tokens,
+#             stopping_criteria=self._stopping_criteria,
+#             eos_token_id=self._processor.tokenizer.eos_token_id,
+#             **self.generate_kwargs
+#         )
+#         gc.collect()
+#         torch.cuda.empty_cache()
 
-        completion_tokens = tokens[:, model_inputs['input_ids'].shape[1]:]
-        completion = self._processor.batch_decode(
-            completion_tokens, 
-            skip_special_tokens=True, 
-            clean_up_tokenization_spaces=False
-        )[0]
-        gc.collect()
-        torch.cuda.empty_cache()
+#         completion_tokens = tokens[:, model_inputs['input_ids'].shape[1]:]
+#         completion = self._processor.batch_decode(
+#             completion_tokens, 
+#             skip_special_tokens=True, 
+#             clean_up_tokenization_spaces=False
+#         )[0]
+#         gc.collect()
+#         torch.cuda.empty_cache()
 
-        output = CompletionResponse(text=completion, raw={'model_output': tokens})
+#         output = CompletionResponse(text=completion, raw={'model_output': tokens})
 
-        # Clean stuff up
-        del model_inputs, tokens, completion_tokens, completion
-        gc.collect()
-        torch.cuda.empty_cache()
+#         # Clean stuff up
+#         del model_inputs, tokens, completion_tokens, completion
+#         gc.collect()
+#         torch.cuda.empty_cache()
 
-        # Return the completion
-        return (output)
+#         # Return the completion
+#         return (output)
 
-    @llm_completion_callback()
-    def stream_complete(
-        self, prompt: str, formatted: bool = False, **kwargs: Any
-    ) -> CompletionResponseGen:
-        raise NotImplementedError
+#     @llm_completion_callback()
+#     def stream_complete(
+#         self, prompt: str, formatted: bool = False, **kwargs: Any
+#     ) -> CompletionResponseGen:
+#         raise NotImplementedError
 
-    @llm_chat_callback()
-    def chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> ChatResponse:
-        raise NotImplementedError
+#     @llm_chat_callback()
+#     def chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> ChatResponse:
+#         raise NotImplementedError
 
-    @llm_chat_callback()
-    def stream_chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> ChatResponseGen:
-        raise NotImplementedError
+#     @llm_chat_callback()
+#     def stream_chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> ChatResponseGen:
+#         raise NotImplementedError
 
-    @llm_completion_callback()
-    async def acomplete(
-        self,
-        prompt: str,
-        images: ImageNode | List[ImageNode],  # this also takes ImageDocument which inherits from ImageNode.
-        formatted: bool = False,
-        **kwargs: Any
-    ) -> CompletionResponse:
-        raise NotImplementedError
+#     @llm_completion_callback()
+#     async def acomplete(
+#         self,
+#         prompt: str,
+#         images: ImageNode | List[ImageNode],  # this also takes ImageDocument which inherits from ImageNode.
+#         formatted: bool = False,
+#         **kwargs: Any
+#     ) -> CompletionResponse:
+#         raise NotImplementedError
 
-    @llm_completion_callback()
-    async def astream_complete(
-        self, prompt: str, formatted: bool = False, **kwargs: Any
-    ) -> CompletionResponseGen:
-        raise NotImplementedError
+#     @llm_completion_callback()
+#     async def astream_complete(
+#         self, prompt: str, formatted: bool = False, **kwargs: Any
+#     ) -> CompletionResponseGen:
+#         raise NotImplementedError
 
-    @llm_chat_callback()
-    async def achat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> ChatResponse:
-        raise NotImplementedError
+#     @llm_chat_callback()
+#     async def achat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> ChatResponse:
+#         raise NotImplementedError
 
-    @llm_chat_callback()
-    async def astream_chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> ChatResponseGen:
-        raise NotImplementedError
+#     @llm_chat_callback()
+#     async def astream_chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> ChatResponseGen:
+#         raise NotImplementedError
 
 
 @st.cache_resource()
 def get_multimodal_llm(**kwargs) -> MultiModalLLM:
     vision_llm = OpenAIMultiModal(
-        model='gpt-4o',
+        model='gpt-4o-mini',
         temperature=0,
         max_new_tokens=512,
         image_detail='auto'

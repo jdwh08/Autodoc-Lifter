@@ -42,9 +42,10 @@
 import os
 import re
 import regex
+from copy import deepcopy
 
 from abc import ABC, abstractmethod
-from typing import Any, List, Tuple, IO, Optional
+from typing import Any, List, Tuple, IO, Optional, Type, Generic, TypeVar
 from llama_index.core.bridge.pydantic import Field
 
 import numpy as np
@@ -53,7 +54,7 @@ from io import BytesIO
 from base64 import b64encode, b64decode
 from PIL import Image as PILImage
 
-from pdf_reader_utils import clean_pdf_chunk, dedupe_title_chunks, combine_listitem_chunks, remove_header_footer_pagenum
+# from pdf_reader_utils import clean_pdf_chunk, dedupe_title_chunks, combine_listitem_chunks
 
 # Unstructured Document Parsing
 from unstructured.partition.pdf import partition_pdf
@@ -93,6 +94,7 @@ os.environ['EXTRACT_IMAGE_BLOCK_CROP_VERTICAL_PAD'] = str(PDF_IMAGE_VERTICAL_PAD
 #         """Init params."""
 #         self.image = image
 
+GenericNode = TypeVar("GenericNode", bound=BaseNode)  # https://mypy.readthedocs.io/en/stable/generics.html
 
 class UnstructuredPDFReader():
     # Yes, we could inherit from LlamaIndex BaseReader even though I don't think it's a good idea.
@@ -173,7 +175,7 @@ class UnstructuredPDFReader():
 
 
     # """DATA LOADING FUNCTIONS"""
-    def _node_rel_prev_next(self, prev_node: BaseNode, next_node: BaseNode) -> Tuple[BaseNode, BaseNode]:
+    def _node_rel_prev_next(self, prev_node: GenericNode, next_node: GenericNode) -> Tuple[GenericNode, GenericNode]:
         """Update pre-next node relationships between two nodes."""
         prev_node.relationships[NodeRelationship.NEXT] = RelatedNodeInfo(
             node_id=next_node.node_id,
@@ -185,8 +187,7 @@ class UnstructuredPDFReader():
         )
         return (prev_node, next_node)
 
-    
-    def _node_rel_parent_child(self, parent_node: BaseNode, child_node: BaseNode) -> Tuple[BaseNode, BaseNode]:
+    def _node_rel_parent_child(self, parent_node: GenericNode, child_node: GenericNode) -> Tuple[GenericNode, GenericNode]:
         """Update parent-child node relationships between two nodes."""
         parent_node.relationships[NodeRelationship.CHILD] = RelatedNodeInfo(
             node_id=child_node.node_id,
@@ -198,6 +199,48 @@ class UnstructuredPDFReader():
         )
         return (parent_node, child_node)
     
+    def _handle_metadata(
+        self, 
+        pdf_chunk: elements.Element, 
+        node: GenericNode, 
+        kept_metadata: List[str] = [
+            'filename', 'file_directory', 'coordinates', 
+            'page_number', 'page_name', 'section',
+            'sent_from', 'sent_to', 'subject',
+            'parent_id', 'category_depth', 
+            'text_as_html', 'languages', 
+            'emphasized_text_contents', 'link_texts', 'link_urls',
+            'is_continuation', 'detection_class_prob',
+    ]) -> GenericNode:
+        """Add common unstructured element metadata to LlamaIndex node."""
+        pdf_chunk_metadata = pdf_chunk.metadata.to_dict() if pdf_chunk.metadata else {}
+        current_kept_metadata = deepcopy(kept_metadata)
+        
+        # Handle some interesting keys
+        node.metadata['type'] = pdf_chunk.category
+        if (('filename' in current_kept_metadata) and ('filename' in pdf_chunk_metadata) and ('file_directory' in pdf_chunk_metadata)):
+            filename = os.path.join(str(pdf_chunk_metadata['file_directory']), str(pdf_chunk_metadata['filename']))
+            node.metadata['filename'] = filename
+            current_kept_metadata.remove('file_directory') if ('file_directory' in current_kept_metadata) else None
+        if (('text_as_html' in current_kept_metadata) and ('text_as_html' in pdf_chunk_metadata)):
+            node.metadata['orignal_table_text'] = getattr(node, 'text', '')
+            node.text = pdf_chunk_metadata['text_as_html']
+            current_kept_metadata.remove('text_as_html')
+        if (('coordinates' in current_kept_metadata) and (pdf_chunk_metadata.get('coordinates') is not None)):
+            node.metadata['coordinates'] = pdf_chunk_metadata['coordinates']
+            current_kept_metadata.remove('coordinates')
+        if (('page_number' in current_kept_metadata) and ('page_number' in pdf_chunk_metadata)):
+            node.metadata['page_number'] = [pdf_chunk_metadata['page_number']]  # save as list to allow for multiple pages
+            current_kept_metadata.remove('page_number')
+        if (('page_name' in current_kept_metadata) and ('page_name' in pdf_chunk_metadata)):
+            node.metadata['page_name'] = [pdf_chunk_metadata['page_name']]  # save as list to allow for multiple sheets
+            current_kept_metadata.remove('page_name')
+        
+        # Handle the remaining keys
+        for key in set(current_kept_metadata).intersection(set(pdf_chunk_metadata.keys())):
+            node.metadata[key] = pdf_chunk_metadata[key]
+        
+        return node
     
     def _handle_text_chunk(self, pdf_text_chunk: elements.Element) -> TextNode:
         """Given a text chunk from Unstructured, convert it to a TextNode for LlamaIndex.
@@ -208,32 +251,13 @@ class UnstructuredPDFReader():
         Returns:
             TextNode: LlamaIndex TextNode which saves the text as HTML for structure.
         """
-        filename = os.path.join(str(pdf_text_chunk.metadata.file_directory), pdf_text_chunk.metadata.filename) if (pdf_text_chunk.metadata.filename is not None) else ''
         new_node = TextNode(
-        text=pdf_text_chunk.text, 
+            text=pdf_text_chunk.text, 
             id_=pdf_text_chunk.id,
-            metadata={
-                'type': pdf_text_chunk.category,
-                'parent_id': pdf_text_chunk.metadata.parent_id,
-                'depth': pdf_text_chunk.metadata.category_depth,
-                'filename': pdf_text_chunk.metadata.filename,
-                'page number': pdf_text_chunk.metadata.page_number,
-                'coordinates': pdf_text_chunk.metadata.coordinates.to_dict() if (pdf_text_chunk.metadata.coordinates is not None) else None,
-                'languages': pdf_text_chunk.metadata.languages,
-                'emphasized_text': '\n'.join(pdf_text_chunk.metadata.emphasized_text_contents or []),
-                'link_texts': pdf_text_chunk.metadata.link_texts,
-                'link_urls': pdf_text_chunk.metadata.link_urls,
-                'link_start_indexes': pdf_text_chunk.metadata.link_start_indexes,
-                # 'index number': '',
-                # 'keywords': '', # node_keywords,
-                # 'summary': '',
-                # 'orignal_text': chunk.text,
-                # 'window': '',
-            },
-            excluded_llm_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text'],
-            excluded_embed_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'page number', 'original_text', 'window', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text']
+            excluded_llm_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text', 'languages', 'detection_class_prob', 'keyword_metadata'],
+            excluded_embed_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'page number', 'original_text', 'window', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text', 'languages', 'detection_class_prob']
         )
-        
+        new_node = self._handle_metadata(pdf_text_chunk, new_node)
         return (new_node)
     
     
@@ -248,33 +272,13 @@ class UnstructuredPDFReader():
             
         NOTE: You will need to get the summary of the table for better performance.
         """
-        filename = os.path.join(str(pdf_table_chunk.metadata.file_directory), pdf_table_chunk.metadata.filename) if (pdf_table_chunk.metadata.filename is not None) else ''
         new_node = TextNode(
-            text=pdf_table_chunk.metadata.text_as_html, 
+            text=pdf_table_chunk.metadata.text_as_html if pdf_table_chunk.metadata.text_as_html else pdf_table_chunk.text,
             id_=pdf_table_chunk.id,
-            metadata={
-                'type': pdf_table_chunk.category,
-                'parent_id': pdf_table_chunk.metadata.parent_id,
-                'depth': pdf_table_chunk.metadata.category_depth,
-                'filename': pdf_table_chunk.metadata.filename,
-                'page number': pdf_table_chunk.metadata.page_number,
-                'coordinates': pdf_table_chunk.metadata.coordinates.to_dict() if (pdf_table_chunk.metadata.coordinates is not None) else None,
-                'languages': pdf_table_chunk.metadata.languages,
-                'emphasized_text': '\n'.join(pdf_table_chunk.metadata.emphasized_text_contents or []),
-                'link_texts': pdf_table_chunk.metadata.link_texts,
-                'link_urls': pdf_table_chunk.metadata.link_urls,
-                'link_start_indexes': pdf_table_chunk.metadata.link_start_indexes,
-                # 'index number': '',
-                # 'keywords': '', # node_keywords,
-                # 'summary': '',
-                # 'orignal_text': chunk.text,
-                # 'window': '',
-                'orignal_table_text': pdf_table_chunk.text,  # NOTE: This attribute is used to determine regular TextNodes from TableNodes.
-            },
-            excluded_llm_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text'],
-            excluded_embed_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'page number', 'original_text', 'window', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text']
+            excluded_llm_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text', 'languages', 'detection_class_prob', 'keyword_metadata'],
+            excluded_embed_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'page number', 'original_text', 'window', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'orignal_table_text', 'languages', 'detection_class_prob']
         )
-        
+        new_node = self._handle_metadata(pdf_table_chunk, new_node)
         return (new_node)
     
     
@@ -297,27 +301,10 @@ class UnstructuredPDFReader():
         new_node = ImageNode(
             text=pdf_image_chunk.text,
             id_=pdf_image_chunk.id,
-            metadata={
-                'type': pdf_image_chunk.category,
-                'parent_id': pdf_image_chunk.metadata.parent_id,
-                'depth': pdf_image_chunk.metadata.category_depth,
-                'filename': pdf_image_chunk.metadata.filename,
-                'page number': pdf_image_chunk.metadata.page_number,
-                'coordinates': pdf_image_chunk.metadata.coordinates.to_dict() if (pdf_image_chunk.metadata.coordinates is not None) else None,
-                'languages': pdf_image_chunk.metadata.languages,
-                'emphasized_text': '\n'.join(pdf_image_chunk.metadata.emphasized_text_contents or []),
-                'link_texts': pdf_image_chunk.metadata.link_texts,
-                'link_urls': pdf_image_chunk.metadata.link_urls,
-                'link_start_indexes': pdf_image_chunk.metadata.link_start_indexes,
-                # 'index number': '',
-                # 'keywords': '', # node_keywords,
-                # 'summary': '',
-                # 'orignal_text': chunk.text,
-                # 'window': '',
-            },
-            excluded_llm_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes'],
-            excluded_embed_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'page number', 'original_text', 'window', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes']
+            excluded_llm_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'languages', 'detection_class_prob', 'keyword_metadata'],
+            excluded_embed_metadata_keys=['type', 'parent_id', 'depth', 'filename', 'coordinates', 'page number', 'original_text', 'window', 'link_texts', 'link_urls', 'link_start_indexes', 'orig_nodes', 'languages', 'detection_class_prob']
         )
+        new_node = self._handle_metadata(pdf_image_chunk, new_node)
         
         # Add image data to image node
         image = None
@@ -354,6 +341,7 @@ class UnstructuredPDFReader():
 
         # Then build the Composite Chunk into a Node.
         composite_node = self._handle_text_chunk(pdf_text_chunk=pdf_composite_chunk)
+        composite_node = self._handle_metadata(pdf_composite_chunk, composite_node)
 
         # Set relationships between chunks.
         for index in range(1, len(child_nodes)):
@@ -361,10 +349,9 @@ class UnstructuredPDFReader():
         for index, node in enumerate(child_nodes):
             composite_node, child_nodes[index] = self._node_rel_parent_child(composite_node, child_nodes[index])
 
-        # TODO: How do we handle the child nodes?
         composite_node.metadata['orig_nodes'] = child_nodes
-        composite_node.excluded_llm_metadata_keys = ['filename', 'coordinates', 'chunk_number', 'window', 'orig_nodes']
-        composite_node.excluded_embed_metadata_keys = ['filename', 'coordinates', 'chunk_number', 'page number', 'original_text', 'window', 'keywords', 'summary', 'orig_nodes']
+        composite_node.excluded_llm_metadata_keys = ['filename', 'coordinates', 'chunk_number', 'window', 'orig_nodes', 'languages', 'detection_class_prob', 'keyword_metadata']
+        composite_node.excluded_embed_metadata_keys = ['filename', 'coordinates', 'chunk_number', 'page number', 'original_text', 'window', 'summary', 'orig_nodes', 'languages', 'detection_class_prob']
         return(composite_node)
 
 
@@ -382,8 +369,8 @@ class UnstructuredPDFReader():
         # Text
         else:
             return(self._handle_text_chunk(pdf_text_chunk=chunk))
-    
-    
+
+
     def pdf_to_chunks(
         self, 
         pdf_file_path: Optional[str],
@@ -501,12 +488,12 @@ class UnstructuredPDFReader():
         self, 
         pdf_file_path: Optional[str] = None,
         pdf_file: Optional[IO[bytes]] = None
-    ) -> List: #[BaseNode]:
+    ) -> List: #[GenericNode]:
         """Given a path to a PDF file, load it with Unstructured and convert it into a list of Llamaindex Base Nodes.
         Input:
             - pdf_file_path (str): the path to the PDF file.
         Output:
-            - List[BaseNode]: a list of LlamaIndex nodes. Creates one node for each parsed node, for each Unstructured Title Chunk.
+            - List[GenericNode]: a list of LlamaIndex nodes. Creates one node for each parsed node, for each Unstructured Title Chunk.
         """
         # 1. PDF to Chunks
         pdf_chunks = self.pdf_to_chunks(pdf_file_path=pdf_file_path, pdf_file=pdf_file)
@@ -516,21 +503,22 @@ class UnstructuredPDFReader():
         # pdf_chunks = clean_pdf_chunk, dedupe_title_chunks, combine_listitem_chunks, remove_header_footer_pagenum
         
         # 2. Chunks to titles
-        pdf_titlechunks = chunk_by_title(
-            pdf_chunks,
-            max_characters=self._max_characters, 
-            new_after_n_chars=self._new_after_n_chars,
-            overlap=self._overlap, 
-            overlap_all=self._overlap_all,
-            multipage_sections=self._multipage_sections,
-            include_orig_elements=True,
-            combine_text_under_n_chars=self._new_after_n_chars
-        )
+        # TODO: I hate this, make our own chunker.
+        # pdf_titlechunks = chunk_by_title(
+        #     pdf_chunks,
+        #     max_characters=self._max_characters, 
+        #     new_after_n_chars=self._new_after_n_chars,
+        #     overlap=self._overlap, 
+        #     overlap_all=self._overlap_all,
+        #     multipage_sections=self._multipage_sections,
+        #     include_orig_elements=True,
+        #     combine_text_under_n_chars=self._new_after_n_chars
+        # )
         # 3. Cleaning
         # pdf_titlechunks = Parallel(n_jobs=max(int(os.cpu_count())-1, 1))(  # type: ignore
         #     delayed(self.clean_pdf_chunk)(chunk) for chunk in pdf_chunks # pdf_titlechunks
         # )
         # pdf_titlechunks = list(pdf_titlechunks)
         # 4. Headlines to llamaindex nodes
-        parsed_chunks = self.chunks_to_nodes(pdf_titlechunks)
+        parsed_chunks = self.chunks_to_nodes(pdf_chunks)
         return (parsed_chunks)

@@ -79,7 +79,7 @@ from pdf_reader import UnstructuredPDFReader
 from pdf_reader_utils import UnstructuredPDFPostProcessor, RegexMetadataAdder, KeywordMetadataAdder, TextSummaryMetadataAdder, TableSummaryMetadataAdder, ImageSummaryMetadataAdder
 from pdf_reader_utils import DATE_REGEX, TIME_REGEX, EMAIL_REGEX, MAIL_ADDR_REGEX, PHONE_REGEX
 from storage import get_vector_store, pdf_to_storage
-from parsers import get_parser
+from parsers import sentence_splitter_from_SaT, get_parser
 from retriever import get_retriever
 from prompts import get_qa_prompt, get_refine_prompt
 from models import get_sat_sentence_splitter, get_embedder, get_reranker, get_llm, get_multimodal_llm
@@ -186,7 +186,7 @@ if (ss.pdf_reader is None):
 if (ss.pdf_postprocessor is None):
     # Get embedding
     # regex_adder = RegexMetadataAdder(regex_pattern=)  # Are there any that I need?
-    keyword_adder = KeywordMetadataAdder()
+    keyword_adder = KeywordMetadataAdder(metadata_name='keywords')
     # table_summary_adder = TableSummaryMetadataAdder(llm=ss.llm)
     # image_summary_adder = ImageSummaryMetadataAdder(llm=ss.multimodal_llm)
     
@@ -217,6 +217,8 @@ if (ss.node_postprocessors is None):
 if (ss.response_synthesizer is None):
     ss.response_synthesizer = get_response_synthesizer(
         response_mode=ResponseMode.COMPACT,
+        # text_qa_template=get_qa_prompt(),
+        # refine_template=get_refine_prompt()
     )
 
 # @st.cache_resource
@@ -256,7 +258,8 @@ def pdf_to_agent(file_io) -> None:
         ss.engine = get_engine(
             retriever=ss.retriever,
             response_synthesizer=ss.response_synthesizer,
-            callback_manager=ss.callback_manager
+            callback_manager=ss.callback_manager,
+            citation_sentence_splitter=sentence_splitter_from_SaT(ss.sentence_model)
         )
     # TODO:
     ### Get LLM Agent
@@ -349,7 +352,7 @@ with messages_container:
 
 with input_container:
     # Accept user input
-    prompt = st.chat_input("Say something")
+    prompt = st.chat_input("Ask your question here.")
 
 if prompt:
     with messages_container:

@@ -17,6 +17,9 @@
 
 #####################################################
 ## IMPORTS:
+import gc
+from torch.cuda import empty_cache
+
 from typing import Optional, IO, List, Tuple
 
 import streamlit as st
@@ -34,7 +37,7 @@ from llama_index.core.node_parser import NodeParser
 
 # Reader and processing
 from pdf_reader import UnstructuredPDFReader
-from pdf_reader_utils import clean_pdf_chunk, dedupe_title_chunks, combine_listitem_chunks, UnstructuredPDFPostProcessor, RegexMetadataAdder, KeywordMetadataAdder, TextSummaryMetadataAdder, TableSummaryMetadataAdder, ImageSummaryMetadataAdder
+from pdf_reader_utils import clean_abbreviations, dedupe_title_chunks, combine_listitem_chunks, remove_header_footer_repeated, UnstructuredPDFPostProcessor, RegexMetadataAdder, KeywordMetadataAdder, TextSummaryMetadataAdder, TableSummaryMetadataAdder, ImageSummaryMetadataAdder
 from pdf_reader_utils import DATE_REGEX, TIME_REGEX, EMAIL_REGEX, MAIL_ADDR_REGEX, PHONE_REGEX
 
 #####################################################
@@ -76,8 +79,15 @@ def pdf_to_storage(
     pdf_chunks = _pdf_reader.load_data(pdf_file_path=pdf_file_path, pdf_file=pdf_file)
 
     # Clean the PDF chunks
-    # pdf_chunks = dedupe_title_chunks(pdf_chunks)
-    # pdf_chunks = combine_listitem_chunks(pdf_chunks)
+    # Insert any cleaners here.
+    
+    # TODO: Cleaners to remove repeated header/footer text, overlapping elements, ...
+    pdf_chunks = clean_abbreviations(pdf_chunks)
+    pdf_chunks = dedupe_title_chunks(pdf_chunks)
+    pdf_chunks = combine_listitem_chunks(pdf_chunks)
+    pdf_chunks = remove_header_footer_repeated(pdf_chunks)
+    empty_cache()
+    gc.collect()
 
     # Postprocess the PDF nodes.
     if (_node_parser is None):

@@ -21,10 +21,13 @@
 ## IMPORTS
 from typing import Optional, Callable, List, Any
 
+# from copy import deepcopy
+
 import streamlit as st
 from streamlit import session_state as ss
 
 from wtpsplit import SaT
+from rapidfuzz import process, fuzz, utils
 
 from llama_index.core import Settings
 from llama_index.core.node_parser.interface import NodeParser
@@ -34,6 +37,9 @@ from llama_index.core.callbacks import CallbackManager
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.node_parser import SemanticSplitterNodeParser, SentenceWindowNodeParser
+
+# from llama_index.core.schema import NodeWithScore
+# from merger import _merge_on_scores
 
 # Lazy Loading
 
@@ -74,21 +80,26 @@ def get_parser(
     
     parser = SemanticSplitterNodeParser.from_defaults(
         embed_model=embed_model,
-        breakpoint_percentile_threshold=93,
+        breakpoint_percentile_threshold=95,
         buffer_size=3,
         sentence_splitter=sentence_splitter,
         callback_manager=callback_manager or Settings.callback_manager,
+        include_metadata=True,
+        include_prev_next_rel=True,
     )
     return (parser)
 
 
 # @st.cache_resource
-# def get_sentence_parser() -> SentenceWindowNodeParser:
-#     """Special sentence-level parser to get the document requested info section."""
-#     sentence_parser = SentenceWindowNodeParser.from_defaults(
-#         # sentence_splitter=split_by_sentence_newline_tokenizer,
-#         window_size=1,
-#         window_metadata_key="window",
-#         original_text_metadata_key="original_text",
-#     )
-#     return (sentence_parser)
+def get_sentence_parser(splitter_model: Optional[SaT] = None) -> SentenceWindowNodeParser:
+    """Special sentence-level parser to get the document requested info section."""
+    if (splitter_model is not None):
+        sentence_splitter = sentence_splitter_from_SaT(splitter_model)
+    
+    sentence_parser = SentenceWindowNodeParser.from_defaults(
+        sentence_splitter=sentence_splitter,
+        window_size=0,
+        window_metadata_key="window",
+        original_text_metadata_key="original_text",
+    )
+    return (sentence_parser)

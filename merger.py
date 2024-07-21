@@ -20,20 +20,23 @@
 
 #####################################################
 ## IMPORTS:
-from typing import List
+from typing import Sequence, Any, TypeVar
 import numpy as np
 
 #####################################################
 ## CODE:
+
+GenericType = TypeVar('GenericType')
+
 def _merge_on_scores(
-    a_list: List,
-    b_list: List,
-    a_scores: List[float],
-    b_scores: List[float],
+    a_list: Sequence[GenericType],
+    b_list: Sequence[GenericType],
+    a_scores: Sequence[float],
+    b_scores: Sequence[float],
     use_distribution: bool = True,
     a_weight: float = 0.5,
     top_k: int = 5,
-) -> List:
+) -> Sequence[GenericType]:
     """
     Given two lists of elements with scores, fuse them together using "Distribution-Based Score Fusion"
     I.e., elements which have high scores in both lists are given even higher ranking here.
@@ -51,7 +54,13 @@ def _merge_on_scores(
 
     # Guard Clauses
     if ((len(a_list) != len(a_scores)) or (len(b_list) != len(b_scores))):
-        raise Exception("_merge_on_scores: Differing number of elements and scores!")
+        raise Exception(
+            f"""_merge_on_scores: Differing number of elements and scores!
+a_list: {a_list}
+a_scores: {a_scores}
+b_list: {b_list}
+b_scores: {b_scores}
+""")
     if (a_weight > 1 or a_weight < 0):
         raise Exception("_merge_on_scores: weight for the A list should be between 0 and 1.")
     if (top_k < 0): # or top_k > :
