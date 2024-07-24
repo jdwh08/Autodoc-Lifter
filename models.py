@@ -250,8 +250,8 @@ def get_llm() -> BaseLLM:
     from llama_index.llms.groq import Groq
 
     llm = Groq(
-        model='llama3-8b-8192',
-        api_key=config.groq_api_key
+        model='llama-3.1-8b-instant',  # old: 'llama3-8b-8192'
+        api_key=config.groq_api_key,
     )
     return (llm)
 
@@ -335,7 +335,7 @@ DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS = 1000
 #             # "`messages_to_prompt` that does so."
 #         ),
 #     )
-    
+
 #     _model: AutoModelForCausalLM = PrivateAttr()
 #     _processor: AutoProcessor = PrivateAttr()
 #     _stopping_criteria: Any = PrivateAttr()
@@ -369,7 +369,7 @@ DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS = 1000
 #             trust_remote_code=True,
 #             **model_kwargs
 #         )
-        
+
 #         # check context_window
 #         config_dict = self._model.config.to_dict()
 #         model_context_window = int(
@@ -382,7 +382,7 @@ DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS = 1000
 #                 "Disable this warning by setting a lower context_window."
 #             )
 #             context_window = model_context_window
-        
+
 #         if ((processor_kwargs is None) or ("max_length" not in processor_kwargs)):
 #             processor_kwargs = processor_kwargs or {}
 #             processor_kwargs["max_length"] = context_window
@@ -399,7 +399,7 @@ DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS = 1000
 #                 f"The model `{model_name}` and processor `{self._processor.tokenizer.name_or_path}` "
 #                 f"are different, please ensure that they are compatible."
 #             )
-        
+
 #         # setup stopping criteria
 #         stopping_ids_list = stopping_ids or []
 
@@ -421,7 +421,7 @@ DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS = 1000
 #             query_wrapper_prompt = PromptTemplate(query_wrapper_prompt)
 
 #         messages_to_prompt = messages_to_prompt or self._messages_to_prompt
-        
+
 #         super().__init__(
 #             context_window=context_window,
 #             max_new_tokens=max_new_tokens,
@@ -457,7 +457,7 @@ DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS = 1000
 #             model_name=self.model_name,
 #             is_chat_model=self.is_chat_model,
 #         )
-    
+
 #     def _message_to_prompt(self, message: str, num_images: int) -> str:
 #         ### TODO: Make this work generically, not just for Phi-3.
 #         """Converts a list of messages into a prompt for Phi-3, handling the image placeholder tags.
@@ -483,7 +483,7 @@ DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS = 1000
 #             prompt = prompt.rstrip("<|endoftext|>")
 #         return (prompt)
 
-    
+
 #     def _messages_to_prompt(self, messages: Sequence[ChatMessage], num_images: int) -> str:
 #         ### TODO: Make this work generically, not just for Phi-3.
 #         """Converts a list of messages into a prompt for Phi-3, handling the image placeholder tags.
@@ -515,14 +515,14 @@ DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS = 1000
 
 #         first_user_message_index = _get_first_user_message_index(messages_dict)
 #         messages_dict[first_user_message_index]['content'] = image_placeholders + messages_dict[first_user_message_index]['content']
-        
+
 #         prompt = self._processor.tokenizer.apply_chat_template(messages_list, tokenize=False, add_generation_prompt=True)  # type: ignore
 #         # need to remove last <|endoftext|> if it is there, which is used for training, not inference. For training, make sure to add <|endoftext|> in the end.
 #         if prompt.endswith("<|endoftext|>"):
 #             prompt = prompt.rstrip("<|endoftext|>")
 #         return (prompt)
 
-    
+
 #     @llm_completion_callback()
 #     def complete(
 #         self,
@@ -532,21 +532,21 @@ DEFAULT_HF_MULTIMODAL_MAX_NEW_TOKENS = 1000
 #         **kwargs: Any
 #     ) -> CompletionResponse:
 #         """Given a prompt and image node(s), get the Phi-3 Vision prompt"""
-        
+
 #         # Handle images input
 #         image_list = []
 #         if (not isinstance(image_documents, list)):
 #             image_documents = [image_documents]
-        
+
 #         # Convert input images into PIL images for the model.
 #         for image in image_documents:
 #             # NOTE: ImageDocument inherets from ImageNode. We'll go extract the image.
 #             image_io = image.resolve_image()
 #             image_pil = PILImage.open(image_io)
 #             image_list.append(image_pil)
-        
+
 #         num_images = len(image_list)
-        
+
 #         # Get the prompt
 #         prompt = self._message_to_prompt(prompt, num_images)
 

@@ -326,10 +326,9 @@ class UnstructuredPDFReader():
             new_node.image = pdf_image_chunk_data_available['image_base64']
             new_node.image_mimetype = pdf_image_chunk_data_available['image_mime_type']
         
-        ## TODO: Use Multimodal LLM to get summary of image, save as text, send to embedding.
         return (new_node)
 
-    
+
     def _handle_composite_chunk(self, pdf_composite_chunk: elements.CompositeElement) -> BaseNode:
         """Given a composite chunk from Unstructured, convert it into a node and handle it dependencies as well."""
         # Start by getting a list of all the nodes which were combined into the composite chunk.
@@ -373,8 +372,8 @@ class UnstructuredPDFReader():
 
     def pdf_to_chunks(
         self, 
-        pdf_file_path: Optional[str],
-        pdf_file: Optional[IO[bytes]],
+        file_path: Optional[str],
+        file: Optional[IO[bytes]],
     ) -> List[elements.Element]:
         """
         Given the file path to a PDF, read it in with UnstructuredIO and return its elements.
@@ -383,13 +382,13 @@ class UnstructuredPDFReader():
         # NOTE: this takes care of pdfminer, and also choses between using detectron2 vs tesseract only.
         # However, it sometimes gets confused by PDFs where text elements are added on later, e.g., CIDs for linking, or REDACTED
         pdf_chunks = partition_pdf(
-            filename=pdf_file_path,
-            file=pdf_file,
+            filename=file_path,
+            file=file,
             unique_element_ids=True,  # UUIDs that are unique for each element
             strategy="hi_res",  # auto: it decides, hi_res: detectron2, but issues with multi-column, ocr_only: pytesseract, fast: pdfminer
             hi_res_model_name='yolox',
             include_page_breaks=False,
-            metadata_filename=pdf_file_path,
+            metadata_filename=file_path,
             infer_table_structure=True,
             extract_images_in_pdf=True,
             extract_image_block_types=['Image', 'Table', 'Formula'],  # element types to save as images
@@ -412,7 +411,7 @@ class UnstructuredPDFReader():
         #     strategy="ocr_only"  # auto: it decides, hi_res: detectron2, but issues with multi-column, ocr_only: pytesseract, fast: pdfminer
         # )
         return pdf_chunks
-    
+
 
     def chunks_to_nodes(self, pdf_chunks: List[elements.Element]) -> List[BaseNode]:
         """
@@ -486,8 +485,8 @@ class UnstructuredPDFReader():
     # """Main user-interaction function"""
     def load_data(
         self, 
-        pdf_file_path: Optional[str] = None,
-        pdf_file: Optional[IO[bytes]] = None
+        file_path: Optional[str] = None,
+        file: Optional[IO[bytes]] = None
     ) -> List: #[GenericNode]:
         """Given a path to a PDF file, load it with Unstructured and convert it into a list of Llamaindex Base Nodes.
         Input:
@@ -496,7 +495,7 @@ class UnstructuredPDFReader():
             - List[GenericNode]: a list of LlamaIndex nodes. Creates one node for each parsed node, for each Unstructured Title Chunk.
         """
         # 1. PDF to Chunks
-        pdf_chunks = self.pdf_to_chunks(pdf_file_path=pdf_file_path, pdf_file=pdf_file)
+        pdf_chunks = self.pdf_to_chunks(file_path=file_path, file=file)
         # return (pdf_chunks)
         
         # Chunk processing

@@ -10,60 +10,84 @@
 # which handles complex questions about the PDF.
 #####################################################
 ### TODO Board:
+# https://docs.llamaindex.ai/en/stable/examples/agent/agent_runner/agent_runner_rag_controllable/#setup-human-in-the-loop-chat
+# Investigate ObjectIndex and retrievers? https://docs.llamaindex.ai/en/stable/examples/agent/multi_document_agents/
+# https://docs.llamaindex.ai/en/stable/module_guides/storing/chat_stores/
 
 #####################################################
 ### IMPORTS
-def pdf_to_agent(pdf_doc) -> ReActAgent:
-    # Save into Storage
-    ss.storage_ctx.docstore.add_documents(pdf_doc)
+from typing import List
 
-    index = VectorStoreIndex.from_documents(
-        pdf_doc,
-        storage_context=ss.storage_ctx,
-        # service_context=ss.service_ctx,
-        use_async=True
-    )
+from streamlit import session_state as ss
 
-    # Query Engine
-    base_query_engine = index.as_query_engine(
-        similarity_top_k=3,
-        # , "filters": filters
-        use_async=True
-    )
-    response_synth = get_response_synthesizer(response_mode='compact')
+from llama_index.core.settings import Settings
+from llama_index.core.tools import QueryEngineTool, ToolMetadata
+from llama_index.core.query_engine import SubQuestionQueryEngine, BaseQueryEngine
+from llama_index.core.agent import AgentRunner, ReActAgent, ReActAgentWorker, ReActChatFormatter, ReActOutputParser
 
-    # Query Engine Tools
-    sqe_tools = [
-        QueryEngineTool(
-            query_engine=base_query_engine,
+from llama_index.core.callbacks import CallbackManager, LlamaDebugHandler
+
+# Own Modules
+from full_doc import FullDocument
+
+#####################################################
+### CODE
+
+ALLOWED_DOCUMENT_TOOLS = ['engine', 'subquestion_engine']
+ALLOWED_TOOLS = ALLOWED_DOCUMENT_TOOLS
+
+def _build_tool_from_fulldoc(fulldoc: FullDocument, tool_name: str) -> QueryEngineTool:
+        """Given a Full Document, build a QueryEngineTool from the specified engine.
+
+        Args:
+            fulldoc (FullDocument): The FullDocument (doc + query engines)
+            tool_name (str): The engine to use.
+
+        Returns:
+            QueryEngineTool: A query engine wrapper around the tool.
+        """
+        if (tool_name.lower() not in ['engine', 'subquestion_engine']):
+            raise ValueError("`tool_name` must be 'engine' or 'subquestion_engine'")
+        if (getattr(fulldoc, tool_name, None) is None):
+            raise ValueError(f"`{tool_name}` must be created from the document first.")
+        
+        # Build Tool
+        tool_description = ''
+        if tool_name == 'engine':
+            tool_description += 'A tool that answers simple questions about the following document:\n' + fulldoc.summary_oneline
+        elif tool_name == 'subquestion_engine':
+            tool_description += 'A tool that answers complex questions about the following document:\n' + fulldoc.summary_oneline
+        
+        tool = QueryEngineTool(
+            query_engine=getattr(fulldoc, tool_name),
             metadata=ToolMetadata(
-                name="Document_Query_Engine",
-                description="""A query engine that can answer a question about the user-submitted document. 
-Single questions about the document should be asked here.""".strip()
+                name=tool_name,
+                description=tool_description
             ),
         )
-    ]
+        return tool
 
-    sub_question_engine = SubQuestionQueryEngine.from_defaults(
-        query_engine_tools=sqe_tools,
-        # service_context=ss.service_ctx,
-        response_synthesizer=response_synth,
-        use_async=True,
-    )
-
+def doclist_to_agent(doclist: List[FullDocument], fulldoc_tools_to_use: List[str]=ALLOWED_DOCUMENT_TOOLS) -> ReActAgent:
     # Agent Tools
-    query_engine_tools = [
-        QueryEngineTool(
-            query_engine=sub_question_engine,
-            metadata=ToolMetadata(
-                name="Document_Question_Engine",
-                description="""A query engine that can answer questions about a user-submitted document.
-Any questions about the document should be asked here.""".strip()
-            ),
-        )
-    ]
+    agent_tools = []
+    
+    # Remove any tools that are not in the allowed list using
+    tools_to_use = list(set(fulldoc_tools_to_use).intersection(set(ALLOWED_DOCUMENT_TOOLS)))
+    if (len(tools_to_use) < len(fulldoc_tools_to_use)):
+        removed_tools = set(fulldoc_tools_to_use) - set(ALLOWED_DOCUMENT_TOOLS)
+        Warning(f"Tools {removed_tools} are not in the allowed list of tools. Skipping...")
+        del removed_tools
+    
+    for tool in tools_to_use:
+        for doc in doclist:
+            agent_tools.append(_build_tool_from_fulldoc(doc, tool))
 
     # Agent
     agent = ReActAgent.from_tools(
-        tools=query_engine_tools, # type: ignore
-        llm=ss.llm,
+        tools=agent_tools,
+        llm=Settings.llm or ss.llm,
+        verbose=True,
+        max_iterations=5
+    )
+
+    return agent

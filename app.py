@@ -10,8 +10,6 @@
 # which runs the backend and codes the frontend UI.
 #####################################################
 ### TODO Board:
-# Citations like CitationQueryEngine
-# https://github.com/run-llama/llama_index/blob/main/llama-index-core/llama_index/core/query_engine/citation_query_engine.py
 
 ################################################################################
 ### PROGRAM SETTINGS
@@ -75,15 +73,19 @@ from llama_index.core import Response
 from llama_index.core.response_synthesizers import ResponseMode
 
 # These are mine, not llama-index's
+from full_doc import FullDocument
 from pdf_reader import UnstructuredPDFReader
-from pdf_reader_utils import UnstructuredPDFPostProcessor, RegexMetadataAdder, KeywordMetadataAdder, TextSummaryMetadataAdder, TableSummaryMetadataAdder, ImageSummaryMetadataAdder
-from pdf_reader_utils import DATE_REGEX, TIME_REGEX, EMAIL_REGEX, MAIL_ADDR_REGEX, PHONE_REGEX
-from storage import get_vector_store, pdf_to_storage
+from pdf_reader_utils import clean_abbreviations, dedupe_title_chunks, combine_listitem_chunks, remove_header_footer_repeated, chunk_by_header
+from metadata_adder import UnstructuredPDFPostProcessor, RegexMetadataAdder
+from keywords import get_keywords, KeywordMetadataAdder
+from summary import get_tree_summarizer, get_tree_summary, TextSummaryMetadataAdder, ImageSummaryMetadataAdder, TableSummaryMetadataAdder
+from storage import get_vector_store
 from parsers import sentence_splitter_from_SaT, get_parser
 from retriever import get_retriever
 from prompts import get_qa_prompt, get_refine_prompt
 from models import get_sat_sentence_splitter, get_embedder, get_reranker, get_llm, get_multimodal_llm
 from engine import get_engine
+from agent import doclist_to_agent
 from obs_logging import get_callback_manager, get_obs
 
 #########################################################################
@@ -91,7 +93,13 @@ from obs_logging import get_callback_manager, get_obs
 st.set_page_config(layout="wide")
 
 if 'pdf_ref' not in ss:
-    ss.input_pdf = None
+    ss.input_pdf = []
+if 'doclist' not in ss:
+    ss.doclist = []
+if 'pdf_reader' not in ss:
+    ss.pdf_reader = None
+if 'pdf_postprocessor' not in ss:
+    ss.pdf_postprocessor = None
 if 'sentence_model' not in ss:
     ss.sentence_model = None  # sentence splitting model, as alternative to nltk/PySBD
 if 'embed_model' not in ss:
@@ -106,28 +114,26 @@ if 'callback_manager' not in ss:
     ss.callback_manager = None
 if 'node_parser' not in ss:
     ss.node_parser = None
-if 'vector_store' not in ss:
-    ss.vector_store = None
-if 'storage_ctx' not in ss:
-    ss.storage_ctx = None
-if 'vector_store_index' not in ss:
-    ss.vector_store_index = None
-if 'retriever' not in ss:
-    ss.retriever = None
+# if 'vector_store' not in ss:
+#     ss.vector_store = []
+# # if 'storage_ctx' not in ss:
+# #     ss.storage_ctx = []
+# # if 'vector_store_index' not in ss:
+# #     ss.vector_store_index = []
+# # if 'retriever' not in ss:
+# #     ss.retriever = []
 if 'node_postprocessors' not in ss:
     ss.node_postprocessors = None
 if 'response_synthesizer' not in ss:
     ss.response_synthesizer = None
-if 'engine' not in ss:
-    ss.engine = None
+# if 'engine' not in ss:
+#     ss.engine = []
+if 'tree_summarizer' not in ss:
+    ss.tree_summarizer = None
 if 'agent' not in ss:
     ss.agent = None
 if 'observability' not in ss:
     ss.observability = None
-if 'pdf_reader' not in ss:
-    ss.pdf_reader = None
-if 'pdf_postprocessor' not in ss:
-    ss.pdf_postprocessor = None
 
 ################################################################################
 ### SCRIPT
@@ -196,10 +202,6 @@ if (ss.pdf_postprocessor is None):
     )
     ss.pdf_postprocessor = pdf_postprocessor
 
-#### Get Vector Store
-if (ss.vector_store is None):
-    ss.vector_store = get_vector_store()
-
 #### Get Observability
 if (ss.observability is None):
     ss.observability = get_obs()
@@ -221,48 +223,56 @@ if (ss.response_synthesizer is None):
         # refine_template=get_refine_prompt()
     )
 
+### Get Tree Summarizer
+if (ss.tree_summarizer is None):
+    ss.tree_summarizer = get_tree_summarizer()
+
 # @st.cache_resource
-def pdf_to_agent(file_io) -> None:
+def handle_new_pdf(file_io) -> None:
     """Handles processing a new source PDF file document."""
-    ### Get file name
-    file_name = file_io.name
-    
-    ### Save Locally
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data/input.pdf'), 'wb') as f:
-        f.write(file_io.getbuffer())
+    with st.sidebar:
+        with (st.spinner(f"Reading input file, this make take some time...")):
+            ### Save Locally
+            # TODO: Get the user to upload their file with a reference name in a separate tab.
+            
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data/input.pdf'), 'wb') as f:
+                f.write(file_io.getbuffer())
+            
+            ### Add to uploaded files
+            ss.uploaded_files.append(uploaded_file)
+            new_document = FullDocument(
+                name='input.pdf',
+                file_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data/input.pdf'),
+            )
+            ss.doclist.append(new_document)
+            
+            #### Process document.
+            new_document.file_to_nodes(
+                reader=ss.pdf_reader, 
+                postreaders=[clean_abbreviations, dedupe_title_chunks, combine_listitem_chunks, remove_header_footer_repeated, chunk_by_header],
+                node_parser=ss.node_parser,
+                postparsers=[ss.pdf_postprocessor],
+            )
         
-    ### Get Storage Context
-    with (st.spinner(f"Processing input file, this make take some time...")):
-        ss.storage_ctx, ss.vector_store_index = pdf_to_storage(
-            pdf_file=None, 
-            pdf_file_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data/input.pdf'), 
-            _pdf_reader=ss.pdf_reader, 
-            _embed_model=ss.embed_model,
-            _pdf_postprocessor=ss.pdf_postprocessor, 
-            _vector_store=ss.vector_store
-        )
+        ### Get Storage Context
+        with (st.spinner(f"Processing input file, this make take some time...")):
+            new_document.nodes_to_summary(summarizer=ss.tree_summarizer)
+            new_document.summary_to_oneline(summarizer=ss.tree_summarizer)  # TODO: probably not the right summarizer
+            new_document.nodes_to_document_keywords()
+            new_document.nodes_to_storage()
     ### Get Retrieval on Vector Store Index
-    with (st.spinner(f"Building retriever for the input file...")):
-        ss.retriever = get_retriever(
-            _vector_store_index=ss.vector_store_index,
-            semantic_top_k=10,
-            sparse_top_k=6,
-            fusion_similarity_top_k=10,
-            semantic_weight_fraction=0.6,
-            merge_up_thresh=0.5,
-            verbose=True,
-            _callback_manager=ss.callback_manager
-        )
+        with (st.spinner(f"Building retriever for the input file...")):
+            new_document.storage_to_retriever(callback_manager=ss.callback_manager)
     ### Get LLM Query Engine
-    with (st.spinner(f"Building query responder for the input file...")):
-        ss.engine = get_engine(
-            retriever=ss.retriever,
-            response_synthesizer=ss.response_synthesizer,
-            callback_manager=ss.callback_manager,
-            citation_sentence_splitter=sentence_splitter_from_SaT(ss.sentence_model)
-        )
-    # TODO:
+        with (st.spinner(f"Building query responder for the input file...")):
+            new_document.retriever_to_engine(response_synthesizer=ss.response_synthesizer, callback_manager=ss.callback_manager)
+            new_document.engine_to_sub_question_engine()
+
+    # TODO.
     ### Get LLM Agent
+        with (st.spinner(f"Building LLM Agent for the input file...")):
+            agent = doclist_to_agent(ss.doclist)
+            ss.agent = agent
     
     # All done!
     st.toast("All done!")
@@ -297,16 +307,15 @@ with st.sidebar:
     uploaded_files = uploaded_files or []  # handle case when no file is uploaded
     for uploaded_file in uploaded_files:
         if (uploaded_file not in ss.uploaded_files):
-            ss.uploaded_files.append(uploaded_file)
-            pdf_to_agent(uploaded_file)
+            handle_new_pdf(uploaded_file)
         
     if (ss.selected_file is None and ss.uploaded_files):
-        ss.selected_file = ss.uploaded_files[0]
+        ss.selected_file = ss.uploaded_files[-1]
     
     file_names = [file.name for file in ss.uploaded_files]
     selected_file_name = st.radio("Uploaded Files:", file_names)
     if selected_file_name:
-        ss.selected_file = [file for file in ss.uploaded_files if file.name == selected_file_name][0]
+        ss.selected_file = [file for file in ss.uploaded_files if file.name == selected_file_name][-1]
 
 ################################################################################
 ### PDF Display UI (Middle Panel)
@@ -338,7 +347,18 @@ with col_left:
 ### Chat UI (Right Panel)
 def handle_chat_message(user_message):
     # Get Response
-    response = ss.engine.query(user_message)
+    if (not hasattr(ss, 'doclist') or len(ss.doclist) == 0):
+        response = "Please upload a document to get started."
+        return response
+
+    if (not hasattr(ss, 'agent')):
+        Warning("No LLM Agent found. Attempting to create one.")
+        with st.sidebar:
+            with (st.spinner(f"Building LLM Agent for the input file...")):
+                agent = doclist_to_agent(ss.doclist)
+                ss.agent = agent
+    
+    response = ss.agent.query(user_message)
     return response
 
 with col_right:

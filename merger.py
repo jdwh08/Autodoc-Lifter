@@ -28,6 +28,43 @@ import numpy as np
 
 GenericType = TypeVar('GenericType')
 
+### TODO: Implement Maximum Marginal Relevance (MMR)
+# https://en.wikipedia.org/wiki/Maximum_marginal_relevance
+# def mmr(documents, query, scores, lambda_param=0.5):
+#     """
+#     Calculate Maximum Marginal Relevance (MMR) for a list of documents.
+    
+#     Parameters:
+#     documents (list of np.array): List of document vectors.
+#     query (np.array): Query vector.
+#     scores (list of float): Relevance scores for each document.
+#     lambda_param (float): Trade-off parameter between relevance and diversity.
+    
+#     Returns:
+#     list of int: Indices of selected documents in order of selection.
+#     """
+#     selected = []
+#     remaining = list(range(len(documents)))
+    
+#     while remaining:
+#         if not selected:
+#             # Select the document with the highest relevance score
+#             idx = np.argmax(scores)
+#         else:
+#             # Calculate MMR for remaining documents
+#             mmr_scores = []
+#             for i in remaining:
+#                 relevance = scores[i]
+#                 diversity = max([np.dot(documents[i], documents[j]) for j in selected])
+#                 mmr_score = lambda_param * relevance - (1 - lambda_param) * diversity
+#                 mmr_scores.append(mmr_score)
+#             idx = remaining[np.argmax(mmr_scores)]
+        
+#         selected.append(idx)
+#         remaining.remove(idx)
+    
+#     return selected
+
 def _merge_on_scores(
     a_list: Sequence[GenericType],
     b_list: Sequence[GenericType],

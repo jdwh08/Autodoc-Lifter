@@ -14,7 +14,7 @@
 # to see the actions undertaken in the RAG pipeline.
 #####################################################
 ## TODOS:
-# 
+# Why does FullRAGEventHandler keep producing duplicate output?
 
 #####################################################
 ## IMPORTS:
@@ -99,6 +99,39 @@ def get_callback_manager() -> CallbackManager:
 
 
 class RAGEventHandler(BaseEventHandler):
+    """Pruned RAG Event Handler."""
+    # events: List[BaseEvent] = []  # TODO: handle removing historical events if they're too old.
+    
+    @classmethod
+    def class_name(cls) -> str:
+        """Class name."""
+        return "RAGEventHandler"
+    
+    def handle(self, event: BaseEvent) -> None:
+        """Logic for handling event."""
+        print("-----------------------")
+        # all events have these attributes
+        print(event.id_)
+        print(event.timestamp)
+        print(event.span_id)
+
+        # event specific attributes
+        if isinstance(event, LLMChatStartEvent):
+            # initial
+            print(event.messages)
+            print(event.additional_kwargs)
+            print(event.model_dict)
+        elif isinstance(event, LLMChatInProgressEvent):
+            # streaming
+            print(event.response.delta)
+        elif isinstance(event, LLMChatEndEvent):
+            # final response
+            print(event.response)
+
+        # self.events.append(event)
+        print("-----------------------")
+
+class FullRAGEventHandler(BaseEventHandler):
     """RAG event handler. Built off the example custom event handler.
 
     In general, logged events are treated as single events in a point in time,
@@ -151,7 +184,7 @@ class RAGEventHandler(BaseEventHandler):
         # event specific attributes
         logger.info(f"Event type: {event.class_name()}")
         if isinstance(event, AgentRunStepStartEvent):
-            logger.info(event.task_id)
+            # logger.info(event.task_id)
             logger.info(event.step)
             logger.info(event.input)
         if isinstance(event, AgentRunStepEndEvent):
@@ -164,7 +197,6 @@ class RAGEventHandler(BaseEventHandler):
             logger.info(event.arguments)
             logger.info(event.tool.name)
             logger.info(event.tool.description)
-            logger.info(event.tool.to_openai_tool())
         if isinstance(event, StreamChatDeltaReceivedEvent):
             logger.info(event.delta)
         if isinstance(event, StreamChatErrorEvent):

@@ -14,8 +14,10 @@
 # which defines how LLMs handle processing.
 #####################################################
 ## TODO Board:
-# Citations like CitationQueryEngine
-# https://github.com/run-llama/llama_index/blob/main/llama-index-core/llama_index/core/query_engine/citation_query_engine.py
+# Handle citations from multiple documents
+
+# Move Citation outside of RAGQueryEngine and instead add it after LLM response
+    # Allows us to get citations from more advanced engines.
 
 #####################################################
 ## IMPORTS
@@ -166,7 +168,6 @@ class RAGQueryEngine(CustomQueryEngine):
         
         # 2. Add cited nodes text to the response text, and cited nodes as metadata.
         # Identify the **sentences** in the response text which have significant overlap with the output.
-        # TODO: Handle in-text citations for the appropriate sentence, and the chunk of the output which it matches.
         response_sentences = text_splitter(response_text)
         source_texts_sentences = [text_splitter(getattr(node.node, 'text', '')) for node in cited_nodes]
         
@@ -211,7 +212,7 @@ Response: {response_sentence}""")
 
                 citation_margin = round((citation_len - (source_sentence_alignment.src_end - source_sentence_alignment.src_start)) / 2)
                 citation_text = source_sentence[max(0, source_sentence_alignment.src_start - citation_margin):min(len(source_sentence), source_sentence_alignment.src_end + citation_margin)]
-                output_citations += (f"[{citation_tag}]: …{citation_text}… (Page {cited_nodes[max_source_index].metadata.get('page_number', '')})" + "\n\n")
+                output_citations += (f"[{citation_tag}]: …{citation_text}… (Page {cited_nodes[max_source_index].metadata.get('page_number', '')})" + "\n\n")   ### TODO: Handle citation from multiple documents by including document name.
                 citation_tag += 1
         
         # Add output citations to the end of the text.
