@@ -66,7 +66,9 @@ class RAGRetriever(BaseRetriever):
             index=vector_store_index, similarity_top_k=semantic_top_k
         )
         self.sentence_bm25_retriever = BM25Retriever.from_defaults(
-            nodes=list(vector_store_index.storage_context.docstore.docs.values()), similarity_top_k=sparse_top_k
+            # nodes=list(vector_store_index.storage_context.docstore.docs.values())
+            index=vector_store_index  # TODO: Confirm this works.
+            , similarity_top_k=sparse_top_k
         )
 
         self._fusion_similarity_top_k = fusion_similarity_top_k
