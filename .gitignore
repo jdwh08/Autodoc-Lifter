@@ -1,3 +1,11 @@
+##### LOCAL PROJECT FILES #####
+data/
+refs/
+figures/
+config.py
+
+###############################
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
