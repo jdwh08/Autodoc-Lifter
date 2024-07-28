@@ -120,6 +120,19 @@ class FullDocument():
     def class_name(cls) -> str:
         return "FullDocument"
     
+    def add_name_to_nodes(self, nodes: List[GenericNode]) -> List[GenericNode]:
+        """Add the name of the document to the nodes.
+
+        Args:
+            nodes (List[GenericNode]): The nodes to add the name to.
+
+        Returns:
+            List[GenericNode]: The nodes with the name added.
+        """
+        for node in nodes:
+            node.metadata['name'] = self.name
+        return nodes
+    
     def file_to_nodes(
         self, 
         reader: BaseReader,
@@ -147,10 +160,14 @@ class FullDocument():
         if (node_parser is not None):
             nodes = node_parser(nodes)  # type: ignore  (Document is a child of BaseNode)
         
-        # Use node postreaders to post process the nodes.
-        if (postparsers is not None):
-            for node_postparser in postparsers:
-                nodes = node_postparser(nodes)  # type: ignore  (TransformComponent allows a list of nodes)
+        # Use node postreaders to post process the nodes. (also add the common name to the nodes)
+        if (postparsers is None):
+            postparsers = [self.add_name_to_nodes]
+        else:
+            postparsers.append(self.add_name_to_nodes)
+
+        for node_postparser in postparsers:
+            nodes = node_postparser(nodes)  # type: ignore  (TransformComponent allows a list of nodes)
         
         # Save nodes
         self.nodes = nodes  # type: ignore
@@ -251,7 +268,7 @@ class FullDocument():
 
     # TODO: Create multiple different retrievers based on the question type(?)
     # E.g., if the question is focused on specific keywords or phrases, use a retriever oriented towards sparse scores.
-    def storage_to_retriever(self, semantic_nodes: int = 10, sparse_nodes: int = 6, fusion_nodes: int = 10, semantic_weight: float = 0.6, merge_up_thresh: float = 0.5, callback_manager: Optional[CallbackManager]=None) -> None:
+    def storage_to_retriever(self, semantic_nodes: int = 6, sparse_nodes: int = 3, fusion_nodes: int = 3, semantic_weight: float = 0.6, merge_up_thresh: float = 0.5, callback_manager: Optional[CallbackManager]=None) -> None:
         """Create retriever from storage."""
         if (not hasattr(self, 'vector_store_index')):
             raise ValueError("Vector store must be extracted from document using `nodes_to_storage` before calling `storage_to_retriever`.")

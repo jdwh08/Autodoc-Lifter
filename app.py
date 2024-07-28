@@ -86,6 +86,7 @@ from prompts import get_qa_prompt, get_refine_prompt
 from models import get_sat_sentence_splitter, get_embedder, get_reranker, get_llm, get_multimodal_llm
 from engine import get_engine
 from agent import doclist_to_agent
+from citation import get_citation_builder
 from obs_logging import get_callback_manager, get_obs
 
 #########################################################################
@@ -114,30 +115,67 @@ if 'callback_manager' not in ss:
     ss.callback_manager = None
 if 'node_parser' not in ss:
     ss.node_parser = None
-# if 'vector_store' not in ss:
-#     ss.vector_store = []
-# # if 'storage_ctx' not in ss:
-# #     ss.storage_ctx = []
-# # if 'vector_store_index' not in ss:
-# #     ss.vector_store_index = []
-# # if 'retriever' not in ss:
-# #     ss.retriever = []
 if 'node_postprocessors' not in ss:
     ss.node_postprocessors = None
 if 'response_synthesizer' not in ss:
     ss.response_synthesizer = None
-# if 'engine' not in ss:
-#     ss.engine = []
 if 'tree_summarizer' not in ss:
     ss.tree_summarizer = None
+if 'citation_builder' not in ss:
+    ss.citation_builder = None
 if 'agent' not in ss:
     ss.agent = None
 if 'observability' not in ss:
     ss.observability = None
 
+if 'uploaded_files' not in ss:
+    ss.uploaded_files = []
+if 'selected_file' not in ss:
+    ss.selected_file = None
+
+if 'chat_messages' not in ss:
+    ss.chat_messages = []
+
 ################################################################################
 ### SCRIPT
 
+### # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+### UI
+st.text("Unstructured Local PDF Chatbot (Built with Meta🦙3)")
+col_left, col_right = st.columns([1, 1])
+
+### # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+### PDF Upload UI (Left Panel)
+with st.sidebar:
+    uploaded_files = st.file_uploader(
+        label='Upload a PDF file.',
+        type='pdf',
+        accept_multiple_files=True,
+        label_visibility='collapsed',
+    )
+
+### # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+### PDF Display UI (Middle Panel)
+# NOTE: This currently only displays the PDF, which requires user interaction (below)
+# TODO: Get this to display without wide margins.
+
+### # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+### Chat UI (Right Panel)
+
+with col_right:
+    messages_container = st.container(height=475, border=False)
+    input_container = st.container(height=80, border=False)
+
+with messages_container:
+    for message in ss.chat_messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+with input_container:
+    # Accept user input
+    prompt = st.chat_input("Ask your question about the document here.")
+
+### # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 ### Get Models and Settings
 # Get Vision LLM
 if (ss.multimodal_llm is None):
@@ -219,14 +257,20 @@ if (ss.node_postprocessors is None):
 if (ss.response_synthesizer is None):
     ss.response_synthesizer = get_response_synthesizer(
         response_mode=ResponseMode.COMPACT,
-        # text_qa_template=get_qa_prompt(),
-        # refine_template=get_refine_prompt()
+        text_qa_template=get_qa_prompt(),
+        refine_template=get_refine_prompt()
     )
 
 ### Get Tree Summarizer
 if (ss.tree_summarizer is None):
     ss.tree_summarizer = get_tree_summarizer()
 
+### Get Citation Builder
+if (ss.citation_builder is None):
+    ss.citation_builder = get_citation_builder()
+
+### # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+### Handle User Interaction
 # @st.cache_resource
 def handle_new_pdf(file_io) -> None:
     """Handles processing a new source PDF file document."""
@@ -238,13 +282,11 @@ def handle_new_pdf(file_io) -> None:
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data/input.pdf'), 'wb') as f:
                 f.write(file_io.getbuffer())
             
-            ### Add to uploaded files
-            ss.uploaded_files.append(uploaded_file)
+            ### Create Document
             new_document = FullDocument(
                 name='input.pdf',
                 file_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data/input.pdf'),
             )
-            ss.doclist.append(new_document)
             
             #### Process document.
             new_document.file_to_nodes(
@@ -267,8 +309,11 @@ def handle_new_pdf(file_io) -> None:
         with (st.spinner(f"Building query responder for the input file...")):
             new_document.retriever_to_engine(response_synthesizer=ss.response_synthesizer, callback_manager=ss.callback_manager)
             new_document.engine_to_sub_question_engine()
+            
+    ### Officially Add to Document List
+        ss.uploaded_files.append(uploaded_file)  # Left UI Bar
+        ss.doclist.append(new_document)  # Document list for RAG. # TODO: Fix duplication.
 
-    # TODO.
     ### Get LLM Agent
         with (st.spinner(f"Building LLM Agent for the input file...")):
             agent = doclist_to_agent(ss.doclist)
@@ -276,76 +321,21 @@ def handle_new_pdf(file_io) -> None:
     
     # All done!
     st.toast("All done!")
+    
+    # Display summary of new document in chat.
+    with messages_container:
+        ss.chat_messages.append(
+            {"role": "assistant", "content": new_document.summary_oneline}
+        )
+        with st.chat_message("assistant"):
+            st.markdown(new_document.summary_oneline)
+
     ### Cleaning
     empty_cache()
     gc.collect()
 
 
-###############################################################################
-### UI
-col_left, col_right = st.columns([1, 1])
-
-if 'uploaded_files' not in ss:
-    ss.uploaded_files = []
-if 'selected_file' not in ss:
-    ss.selected_file = None
-
-if 'chat_messages' not in ss:
-    ss.chat_messages = []
-
-################################################################################
-### PDF Upload UI (Left Panel)
-
-with st.sidebar:
-    uploaded_files = st.file_uploader(
-        label='Upload a PDF file.',
-        type='pdf',
-        accept_multiple_files=True,
-        label_visibility='collapsed',
-    )
-
-    uploaded_files = uploaded_files or []  # handle case when no file is uploaded
-    for uploaded_file in uploaded_files:
-        if (uploaded_file not in ss.uploaded_files):
-            handle_new_pdf(uploaded_file)
-        
-    if (ss.selected_file is None and ss.uploaded_files):
-        ss.selected_file = ss.uploaded_files[-1]
-    
-    file_names = [file.name for file in ss.uploaded_files]
-    selected_file_name = st.radio("Uploaded Files:", file_names)
-    if selected_file_name:
-        ss.selected_file = [file for file in ss.uploaded_files if file.name == selected_file_name][-1]
-
-################################################################################
-### PDF Display UI (Middle Panel)
-@st.cache_data
-def get_pdf_display(file, app_width: str = "100%", app_height: str = "500", starting_page_number: Optional[int] = None) -> str:
-    # Read file as binary
-    file_bytes = file.getbuffer()
-    base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
-    
-    pdf_display = f'<embed src="data:application/pdf;base64,{base64_pdf}"'  # iframe vs embed
-    if starting_page_number is not None:
-        pdf_display += f'#page={starting_page_number}'
-    pdf_display += f' width={app_width} height="{app_height}" type="application/pdf"></iembed>'  # iframe vs embed
-    return (pdf_display)
-
-with col_left:
-    if (ss.selected_file is not None):
-        selected_file = ss.selected_file
-        selected_file_name = selected_file.name
-        
-        if (selected_file.type == "application/pdf"):
-            pdf_display = get_pdf_display(selected_file, app_width="100%", app_height="550")
-            st.markdown(pdf_display, unsafe_allow_html=True)
-    else:
-        selected_file_name = "Upload a file."
-        st.markdown(f"## {selected_file_name}")
-
-################################################################################
-### Chat UI (Right Panel)
-def handle_chat_message(user_message):
+def handle_chat_message(user_message: str) -> str:
     # Get Response
     if (not hasattr(ss, 'doclist') or len(ss.doclist) == 0):
         response = "Please upload a document to get started."
@@ -359,21 +349,53 @@ def handle_chat_message(user_message):
                 ss.agent = agent
     
     response = ss.agent.query(user_message)
+    # Get citations if available
+    response = ss.citation_builder.get_citations(response, citation_threshold=60)
+    # Add citations to response text
+    response = ss.citation_builder.add_citations_to_response(response)
     return response
 
-with col_right:
-    messages_container = st.container(height=475, border=False)
-    input_container = st.container(height=80, border=False)
+@st.cache_data
+def get_pdf_display(file, app_width: str = "100%", app_height: str = "500", starting_page_number: Optional[int] = None) -> str:
+    # Read file as binary
+    file_bytes = file.getbuffer()
+    base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
+    
+    pdf_display = f'<embed src="data:application/pdf;base64,{base64_pdf}"'  # TODO: iframe vs embed
+    if starting_page_number is not None:
+        pdf_display += f'#page={starting_page_number}'
+    pdf_display += f' width={app_width} height="{app_height}" type="application/pdf"></iembed>'  # iframe vs embed
+    return (pdf_display)
 
-with messages_container:
-    for message in ss.chat_messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# Upload
+with st.sidebar:
+    uploaded_files = uploaded_files or []  # handle case when no file is uploaded
+    for uploaded_file in uploaded_files:
+        if (uploaded_file not in ss.uploaded_files):
+            handle_new_pdf(uploaded_file)
+        
+    if (ss.selected_file is None and ss.uploaded_files):
+        ss.selected_file = ss.uploaded_files[-1]
+    
+    file_names = [file.name for file in ss.uploaded_files]
+    selected_file_name = st.radio("Uploaded Files:", file_names)
+    if selected_file_name:
+        ss.selected_file = [file for file in ss.uploaded_files if file.name == selected_file_name][-1]
 
-with input_container:
-    # Accept user input
-    prompt = st.chat_input("Ask your question here.")
+with col_left:
+    if (ss.selected_file is None):
+        selected_file_name = "Upload a file."
+        st.markdown(f"## {selected_file_name}")
+        
+    elif (ss.selected_file is not None):
+        selected_file = ss.selected_file
+        selected_file_name = selected_file.name
+        
+        if (selected_file.type == "application/pdf"):
+            pdf_display = get_pdf_display(selected_file, app_width="100%", app_height="550")
+            st.markdown(pdf_display, unsafe_allow_html=True)
 
+# Chat
 if prompt:
     with messages_container:
         with st.chat_message("user"):

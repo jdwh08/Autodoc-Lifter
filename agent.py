@@ -46,8 +46,8 @@ def _build_tool_from_fulldoc(fulldoc: FullDocument, tool_name: str) -> QueryEngi
         Returns:
             QueryEngineTool: A query engine wrapper around the tool.
         """
-        if (tool_name.lower() not in ['engine', 'subquestion_engine']):
-            raise ValueError("`tool_name` must be 'engine' or 'subquestion_engine'")
+        if (tool_name.lower() not in ALLOWED_DOCUMENT_TOOLS):
+            raise ValueError("`tool_name` must be one of {ALLOWED_DOCUMENT_TOOLS}")
         if (getattr(fulldoc, tool_name, None) is None):
             raise ValueError(f"`{tool_name}` must be created from the document first.")
         
@@ -67,7 +67,7 @@ def _build_tool_from_fulldoc(fulldoc: FullDocument, tool_name: str) -> QueryEngi
         )
         return tool
 
-def doclist_to_agent(doclist: List[FullDocument], fulldoc_tools_to_use: List[str]=ALLOWED_DOCUMENT_TOOLS) -> ReActAgent:
+def doclist_to_agent(doclist: List[FullDocument], fulldoc_tools_to_use: List[str]=['engine']) -> SubQuestionQueryEngine: # ReActAgent:
     # Agent Tools
     agent_tools = []
     
@@ -83,11 +83,13 @@ def doclist_to_agent(doclist: List[FullDocument], fulldoc_tools_to_use: List[str
             agent_tools.append(_build_tool_from_fulldoc(doc, tool))
 
     # Agent
-    agent = ReActAgent.from_tools(
-        tools=agent_tools,
+    # agent = ReActAgent.from_tools(
+    agent = SubQuestionQueryEngine.from_defaults(
+        # tools=agent_tools,
+        query_engine_tools=agent_tools,
         llm=Settings.llm or ss.llm,
         verbose=True,
-        max_iterations=5
+        # max_iterations=5
     )
 
     return agent

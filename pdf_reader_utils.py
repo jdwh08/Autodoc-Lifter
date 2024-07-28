@@ -527,6 +527,22 @@ def chunk_by_header(
             index += 1
             continue
         
+        elif (chunk.metadata.get('parent_id', None) in id_to_index):
+            # This chunk is part of the same title as a prior chunk.
+            # Add this text into the prior title node.
+            jndex = id_to_index[chunk.metadata['parent_id']]
+
+            # if (not isinstance(output[jndex].metadata['page number'], list)):
+                # output[jndex].metadata['page number'] = [chunk.metadata['page number']]
+            
+            output[jndex] = _combine_chunks(output[jndex], chunk)
+            # output[jndex].text = getattr(output[jndex], 'text', '') + '\n' + getattr(chunk, 'text', '')
+            # output[jndex].metadata['page number'] = list(set(output[jndex].metadata['page number'] + [chunk.metadata['page number']]))
+            # output[jndex].metadata['languages'] = list(set(output[jndex].metadata['languages'] + chunk.metadata['languages']))
+            
+            pdf_chunks.remove(chunk)
+            continue
+        
         elif (
             (chunk.metadata.get('parent_id', None) is None) 
             and (
@@ -544,23 +560,6 @@ def chunk_by_header(
             id_to_index[chunk.id_] = len(output) - 1
             index += 1
             continue
-        
-        elif (chunk.metadata.get('parent_id', None) in id_to_index):
-            # This chunk is part of the same title as a prior chunk.
-            # Add this text into the prior title node.
-            jndex = id_to_index[chunk.metadata['parent_id']]
-
-            # if (not isinstance(output[jndex].metadata['page number'], list)):
-                # output[jndex].metadata['page number'] = [chunk.metadata['page number']]
-            
-            output[jndex] = _combine_chunks(output[jndex], chunk)
-            # output[jndex].text = getattr(output[jndex], 'text', '') + '\n' + getattr(chunk, 'text', '')
-            # output[jndex].metadata['page number'] = list(set(output[jndex].metadata['page number'] + [chunk.metadata['page number']]))
-            # output[jndex].metadata['languages'] = list(set(output[jndex].metadata['languages'] + chunk.metadata['languages']))
-            
-            pdf_chunks.remove(chunk)
-            # TODO: Update relationships between nodes.
-            continue
 
         else:
             # Add the text to the prior node that isn't a table or image.
@@ -573,8 +572,8 @@ def chunk_by_header(
                     # print(f'{title_chunk.id_}: {title_chunk.metadata['type']}, text: {title_chunk.text}, parent: {title_chunk.metadata['parent_id']}')
                 jndex -= 1
             
-            if (jndex <= 0):
-                raise Exception(f'Prior title chunk not found: {index}, {getattr(chunk.metadata, 'parent_id')}')
+            if (jndex < 0):
+                raise Exception(f'Prior title chunk not found: {index}, {getattr(chunk.metadata, 'parent_id', '')}')
             
             # Add this text into the prior title node.
             # if (not isinstance(output[jndex].metadata['page number'], list)):

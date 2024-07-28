@@ -20,8 +20,9 @@
 
 #####################################################
 ## IMPORTS:
-from typing import Sequence, Any, TypeVar
+from typing import Sequence, Any, TypeVar, Union
 import numpy as np
+from numpy.typing import NDArray
 
 #####################################################
 ## CODE:
@@ -68,8 +69,8 @@ GenericType = TypeVar('GenericType')
 def _merge_on_scores(
     a_list: Sequence[GenericType],
     b_list: Sequence[GenericType],
-    a_scores: Sequence[float],
-    b_scores: Sequence[float],
+    a_scores_input: Sequence[Union[float, np.float64, None]],
+    b_scores_input: Sequence[Union[float, np.float64, None]],
     use_distribution: bool = True,
     a_weight: float = 0.5,
     top_k: int = 5,
@@ -90,13 +91,13 @@ def _merge_on_scores(
     """
 
     # Guard Clauses
-    if ((len(a_list) != len(a_scores)) or (len(b_list) != len(b_scores))):
+    if ((len(a_list) != len(a_scores_input)) or (len(b_list) != len(b_scores_input))):
         raise Exception(
             f"""_merge_on_scores: Differing number of elements and scores!
 a_list: {a_list}
-a_scores: {a_scores}
+a_scores: {a_scores_input}
 b_list: {b_list}
-b_scores: {b_scores}
+b_scores: {b_scores_input}
 """)
     if (a_weight > 1 or a_weight < 0):
         raise Exception("_merge_on_scores: weight for the A list should be between 0 and 1.")
@@ -106,35 +107,41 @@ b_scores: {b_scores}
         # I know about the n^2 solution with two lists and (if not in x), but it's a bit annoying.
         raise Exception("_merge_on_scores: top_k must be between 0 and the total number of elements.")
 
+    # 0. Convert to numpy arrays
+    # NOTE: When using a SubQuestionQueryEngine, the subanswers are saved as NodesWithScores, but their score is None.
+    # We want to filter these out, so we get citations when the two texts are very similar.
+    a_scores: NDArray[np.float64] = np.array(a_scores_input, dtype=np.float64)
+    b_scores: NDArray[np.float64] = np.array(b_scores_input, dtype=np.float64)
+
     # 1. Calculate mean of scores.
-    a_mean = np.mean(a_scores)  # np.nan if empty
-    b_mean = np.mean(b_scores)
+    a_mean = np.nanmean(a_scores)  # np.nan if empty
+    b_mean = np.nanmean(b_scores)
 
     # 2. Calculate standard deviations
-    a_stdev = np.std(a_scores)
-    b_stdev = np.std(b_scores)
+    a_stdev = np.nanstd(a_scores)
+    b_stdev = np.nanstd(b_scores)
 
     # 3. Get minimum and maximum bands as 3std from mean
     # alternatively, use actual min-max scaling
-    a_min = a_mean - 3 * a_stdev if use_distribution else np.min(a_scores)
-    a_max = a_mean + 3 * a_stdev if use_distribution else np.max(a_scores)
-    b_min = b_mean - 3 * b_stdev if use_distribution else np.min(b_scores)
-    b_max = b_mean + 3 * b_stdev if use_distribution else np.max(b_scores)
+    a_min = a_mean - 3 * a_stdev if use_distribution else np.nanmin(a_scores)
+    a_max = a_mean + 3 * a_stdev if use_distribution else np.nanmax(a_scores)
+    b_min = b_mean - 3 * b_stdev if use_distribution else np.nanmin(b_scores)
+    b_max = b_mean + 3 * b_stdev if use_distribution else np.nanmax(b_scores)
 
     # 4. Rescale the distributions
     if (a_max > a_min):
-        a_scores = [
-            float((x - a_min) / (a_max - a_min))
+        a_scores = np.array([
+            ((x - a_min) / (a_max - a_min))
             for x in a_scores
-        ]
+        ], dtype=np.float64)
     if (b_max > b_min):
-        b_scores = [
-            float((x - b_min) / (b_max - b_min))
+        b_scores = np.array([
+            (x - b_min) / (b_max - b_min)
             for x in b_scores
-        ]
+        ], dtype=np.float64)
 
     # 5. Fuse the scores together
-    full_dict = []
+    full_dict: list[tuple[GenericType, float]] = []
     for index, element in enumerate(a_list):
         a_score = a_scores[index]
         if (element in b_list):
@@ -143,7 +150,7 @@ b_scores: {b_scores}
             fused_score = a_weight * a_score + (1-a_weight) * b_score
             full_dict.append((element, fused_score))
         else:
-            a_score = a_scores[index]
+            # Only in A.
             full_dict.append((element, a_weight * a_score))
 
     for index, element in enumerate(b_list):

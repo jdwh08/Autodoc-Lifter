@@ -33,9 +33,8 @@ QA_PROMPT = """Context information is below.\n
 Given the context information, answer the query.
 You must adhere to the following rules:
 - Use the context information, not prior knowledge.
-- End the answer with a brief quote from the context that was most important in answering the question correctly, along with the page number. 
-    - If the context is not helpful in answering the question, leave the quote and page number blank.
-    - Format for quote and page number should be "Quote text here" [Page Number of Quote]
+- End the answer with any brief quote(s) from the context that are the most essential in answering the question. 
+    - If the context is not helpful in answering the question, do not include a quote.
 
 Query: {query_str}
 Answer: """
@@ -50,9 +49,8 @@ We have the opportunity to refine the existing answer (only if needed) with some
 Given the new context, refine the original answer to better answer the query.
 You must adhere to the following rules:
 - If the context isn't useful, return the original answer.
-- End the answer with a brief quote from the original answer or new context that was most important in answering the question correctly, along with the page number. 
-    - If the new context is not helpful in answering the question, leave the original answer quote and page number unchanged.
-    - Format for quote and page number should be "Quote text here" [Page Number of Quote]
+- End the answer with any brief quote(s) from the original answer or new context that are the most essential in answering the question. 
+    - If the new context is not helpful in answering the question, leave the original answer unchanged.
 
 Refined Answer: """
 

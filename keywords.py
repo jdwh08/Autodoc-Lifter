@@ -58,7 +58,14 @@ def get_keywords(input_text: str, top_k: int=5) -> str:
     keywords_yake = dict(sorted(keywords_yake.items(), key=lambda x: x[1], reverse=True))
 
     # Merge RAKE and YAKE based on scores.
-    keywords_merged = _merge_on_scores(list(keywords_yake.keys()), list(keywords_rake.keys()), list(keywords_yake.values()), list(keywords_rake.values()), a_weight=0.5, top_k=top_k)
+    keywords_merged = _merge_on_scores(
+        list(keywords_yake.keys()), 
+        list(keywords_rake.keys()), 
+        list(keywords_yake.values()), 
+        list(keywords_rake.values()), 
+        a_weight=0.5, 
+        top_k=top_k
+    )
 
     # return (list(keywords_rake.keys())[:top_k], list(keywords_yake.keys())[:top_k], keywords_merged)
     return ', '.join(keywords_merged)  # kinda regretting forcing this into a string

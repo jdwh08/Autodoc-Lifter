@@ -25,7 +25,7 @@ from collections import defaultdict
 
 import streamlit as st
 
-from merger import _merge_on_scores
+import numpy as np
 
 from llama_index.core.utils import truncate_text
 from llama_index.core.retrievers import BaseRetriever, VectorIndexRetriever
@@ -34,6 +34,11 @@ from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.core import VectorStoreIndex #, StorageContext, 
 from llama_index.core.schema import BaseNode, IndexNode, NodeWithScore, QueryBundle
 from llama_index.core.callbacks.base import CallbackManager
+
+# Own Modules:
+from merger import _merge_on_scores
+
+# Lazy Loading:
 
 #####################################################
 ## CODE:
@@ -128,7 +133,7 @@ class RAGRetriever(BaseRetriever):
                     set({n.node.node_id for n in parent_cur_children})
                 )
 
-                parent_node_text = truncate_text(parent_node.text, 100)
+                parent_node_text = truncate_text(getattr(parent_node, 'text', ''), 100)
                 info_str = (
                     f"> Merging {len(parent_cur_children)} nodes into parent node.\n"
                     f"> Parent node id: {parent_node_id}.\n"
@@ -146,12 +151,12 @@ class RAGRetriever(BaseRetriever):
                 parent_node_with_score = NodeWithScore(
                     node=parent_node, score=avg_score
                 )
-                nodes_to_add[parent_node_id] = parent_node_with_score
+                nodes_to_add[parent_node_id] = parent_node_with_score  # type: ignore (NodesWithScore is a child of BaseNode)
 
         # delete old child nodes, add new parent nodes
         new_nodes = [n for n in nodes if n.node.node_id not in node_ids_to_delete]
         # add parent nodes
-        new_nodes.extend(list(nodes_to_add.values()))
+        new_nodes.extend(list(nodes_to_add.values()))  # type: ignore (NodesWithScore is a child of BaseNode)
 
         is_changed = len(node_ids_to_delete) > 0
         return new_nodes, is_changed
@@ -180,7 +185,7 @@ class RAGRetriever(BaseRetriever):
                 )
                 next_node = cast(BaseNode, next_node)
 
-                next_node_text = truncate_text(next_node.get_text(), 100)  # TODO: why not higher?
+                next_node_text = truncate_text(getattr(next_node, 'text', ''), 100)  # TODO: why not higher?
                 info_str = (
                     f"> Filling in node. Node id: {cur_node.next_node.node_id}"
                     f"> Node text: {next_node_text}\n"
@@ -216,14 +221,14 @@ class RAGRetriever(BaseRetriever):
         initial_nodes = _merge_on_scores(
             vector_sentence_nodes,
             bm25_sentence_nodes,
-            [float(a.score) for a in vector_sentence_nodes],
-            [float(b.score) for b in bm25_sentence_nodes],
+            [getattr(a, "score", np.nan) for a in vector_sentence_nodes],
+            [getattr(b, "score", np.nan) for b in bm25_sentence_nodes],
             a_weight=self._semantic_weight_fraction,
             top_k=self._fusion_similarity_top_k
         )
         
         # Merge nodes
-        cur_nodes, is_changed = self._try_merging(initial_nodes)
+        cur_nodes, is_changed = self._try_merging(list(initial_nodes))  # technically _merge_on_scores returns a sequence.
         while is_changed:
             cur_nodes, is_changed = self._try_merging(cur_nodes)
 
