@@ -72,7 +72,7 @@ from llama_index.core.postprocessor import SimilarityPostprocessor, SentenceEmbe
 from llama_index.core import Response
 from llama_index.core.response_synthesizers import ResponseMode
 
-# These are mine, not llama-index's
+# Own Modules
 from full_doc import FullDocument
 from pdf_reader import UnstructuredPDFReader
 from pdf_reader_utils import clean_abbreviations, dedupe_title_chunks, combine_listitem_chunks, remove_header_footer_repeated, chunk_by_header
