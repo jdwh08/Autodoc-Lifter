@@ -59,13 +59,8 @@ import pandas as pd
 from joblib import Parallel, delayed
 
 from llama_index.core import Settings
-from llama_index.core.storage.docstore import SimpleDocumentStore
-from llama_index.core import VectorStoreIndex, get_response_synthesizer
-from llama_index.core.readers.base import BaseReader
-from llama_index.core.schema import QueryBundle
-from llama_index.core.response.notebook_utils import display_source_node
+from llama_index.core import get_response_synthesizer
 from llama_index.core.postprocessor import SimilarityPostprocessor, SentenceEmbeddingOptimizer
-from llama_index.core import Response
 from llama_index.core.response_synthesizers import ResponseMode
 
 # Own Modules
