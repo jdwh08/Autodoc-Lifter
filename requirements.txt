@@ -1,9 +1,8 @@
 torch
 torchaudio
 torchvision
-transformers>=4.40.0
+transformers>=4.40.2
 sentence-transformers
-wtpsplit>=2.0.0
 nltk
 multi-rake
 yake

@@ -74,7 +74,7 @@ from summary import get_tree_summarizer, get_tree_summary, TextSummaryMetadataAd
 from parsers import get_parser
 # from retriever import get_retriever
 from prompts import get_qa_prompt, get_refine_prompt
-from models import get_sat_sentence_splitter, get_embedder, get_reranker, get_llm, get_multimodal_llm
+from models import get_embedder, get_reranker, get_llm, get_multimodal_llm
 # from engine import get_engine
 from agent import doclist_to_agent
 from citation import get_citation_builder
@@ -96,8 +96,8 @@ if 'pdf_reader' not in ss:
     ss.pdf_reader = None
 if 'pdf_postprocessor' not in ss:
     ss.pdf_postprocessor = None
-if 'sentence_model' not in ss:
-    ss.sentence_model = None  # sentence splitting model, as alternative to nltk/PySBD
+# if 'sentence_model' not in ss:
+    # ss.sentence_model = None  # sentence splitting model, as alternative to nltk/PySBD
 if 'embed_model' not in ss:
     ss.embed_model = None
 if 'reranker_model' not in ss:
@@ -175,7 +175,7 @@ with input_container:
 # Get Vision LLM
 if (ss.multimodal_llm is None):
     vision_llm = get_multimodal_llm(
-        # model_name='dwb2023/phi-3-vision-128k-instruct-quantized',
+        # model_name='microsoft/Phi-3-vision-128k-instruct',
         # tokenizer_model_name='microsoft/Phi-3-vision-128k-instruct',
     )
     ss.multimodal_llm = vision_llm
@@ -187,9 +187,9 @@ if (ss.llm is None):
     Settings.llm = llm
 
 # Get Sentence Splitting Model.
-if (ss.sentence_model is None):
-    sent_splitter = get_sat_sentence_splitter('sat-3l-sm')
-    ss.sentence_model = sent_splitter
+# if (ss.sentence_model is None):
+#     sent_splitter = get_sat_sentence_splitter('sat-3l-sm')
+#     ss.sentence_model = sent_splitter
 
 # Get Embedding Model
 if (ss.embed_model is None):
@@ -209,7 +209,7 @@ if (ss.callback_manager is None):
 
 # Get Node Parser
 if (ss.node_parser is None):
-    node_parser = get_parser(embed_model=Settings.embed_model, sentence_model=ss.sentence_model, callback_manager=ss.callback_manager)
+    node_parser = get_parser(embed_model=Settings.embed_model, callback_manager=ss.callback_manager)
     ss.node_parser = node_parser
     Settings.node_parser = node_parser
 

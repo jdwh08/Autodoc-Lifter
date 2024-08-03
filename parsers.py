@@ -26,7 +26,7 @@ from typing import Optional, Callable, List, Any
 import streamlit as st
 from streamlit import session_state as ss
 
-from wtpsplit import SaT
+# from wtpsplit import SaT
 from rapidfuzz import process, fuzz, utils
 
 from llama_index.core import Settings
@@ -45,38 +45,38 @@ from llama_index.core.node_parser import SemanticSplitterNodeParser, SentenceWin
 
 #####################################################
 ## CODE
-def sentence_splitter_from_SaT(model: Optional[SaT]) -> Callable[[str], List[str]]:
-    """Convert a SaT model into a sentence splitter function.
+# def sentence_splitter_from_SaT(model: Optional[SaT]) -> Callable[[str], List[str]]:
+#     """Convert a SaT model into a sentence splitter function.
 
-    Args:
-        model (SaT): The Segment Anything model.
+#     Args:
+#         model (SaT): The Segment Anything model.
 
-    Returns:
-        Callable[[str], List[str]]: The sentence splitting function using the SaT model.
-    """
-    model = model or ss.model
-    if model is None:
-        raise ValueError("Sentence splitting model is not set.")
+#     Returns:
+#         Callable[[str], List[str]]: The sentence splitting function using the SaT model.
+#     """
+#     model = model or ss.model
+#     if model is None:
+#         raise ValueError("Sentence splitting model is not set.")
     
-    def sentence_splitter(text: str) -> List[str]:
-        segments = model.split(text_or_texts=text)
-        if isinstance(segments, list):
-            return segments
-        else:
-            return list(segments)  # type: ignore (generator is the other option?)
+#     def sentence_splitter(text: str) -> List[str]:
+#         segments = model.split(text_or_texts=text)
+#         if isinstance(segments, list):
+#             return segments
+#         else:
+#             return list(segments)  # type: ignore (generator is the other option?)
     
-    return (sentence_splitter)
+#     return (sentence_splitter)
 
 # @st.cache_resource  # can't cache because embed_model is not hashable.
 def get_parser(
         embed_model: BaseEmbedding,
-        sentence_model: Optional[SaT] = None,
+        # sentence_model: Optional[SaT] = None,
         sentence_splitter: Optional[Callable[[str], List[str]]] = None,
         callback_manager: Optional[CallbackManager] = None
     ) -> NodeParser:
     """Main parser to use throughout the RAG document processing."""
-    if (sentence_model is not None) and (sentence_splitter is not None):
-        sentence_splitter = sentence_splitter_from_SaT(sentence_model)
+    # if (sentence_model is not None) and (sentence_splitter is not None):
+        # sentence_splitter = sentence_splitter_from_SaT(sentence_model)
     
     parser = SemanticSplitterNodeParser.from_defaults(
         embed_model=embed_model,
@@ -91,13 +91,25 @@ def get_parser(
 
 
 # @st.cache_resource
-def get_sentence_parser(splitter_model: Optional[SaT] = None) -> SentenceWindowNodeParser:
-    """Special sentence-level parser to get the document requested info section."""
-    if (splitter_model is not None):
-        sentence_splitter = sentence_splitter_from_SaT(splitter_model)
+# def get_sentence_parser(splitter_model: Optional[SaT] = None) -> SentenceWindowNodeParser:
+#     """Special sentence-level parser to get the document requested info section."""
+#     if (splitter_model is not None):
+#         sentence_splitter = sentence_splitter_from_SaT(splitter_model)
     
+#     sentence_parser = SentenceWindowNodeParser.from_defaults(
+#         sentence_splitter=sentence_splitter,
+#         window_size=0,
+#         window_metadata_key="window",
+#         original_text_metadata_key="original_text",
+#     )
+#     return (sentence_parser)
+
+def get_sentence_parser() -> SentenceWindowNodeParser:
+    """Special sentence-level parser to get the document requested info section."""
+    # if (splitter_model is not None):
+    #     sentence_splitter = sentence_splitter_from_SaT(splitter_model)
     sentence_parser = SentenceWindowNodeParser.from_defaults(
-        sentence_splitter=sentence_splitter,
+        # sentence_splitter=sentence_splitter,
         window_size=0,
         window_metadata_key="window",
         original_text_metadata_key="original_text",

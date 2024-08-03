@@ -18,8 +18,11 @@
 
 #####################################################
 ## IMPORTS:
-import os
 import logging
+
+import os
+import sys
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Union, Optional, Sequence, Tuple, cast
 from PIL import Image as PILImage
 
@@ -27,8 +30,12 @@ import streamlit as st
 
 import gc
 import torch
-from transformers import AutoModelForCausalLM, AutoProcessor, StoppingCriteria, StoppingCriteriaList
-from wtpsplit import SaT  # Sentence segmentation model. Yes. Really.
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, StoppingCriteria, StoppingCriteriaList
+# from wtpsplit import SaT  # Sentence segmentation model. Dropping this. Requires adapters=0.2.1->Transformers=4.39.3 | Phi3 Vision requires Transformers 4.40.2
+
+import math
+import numpy as np
+from tqdm.auto import tqdm
 
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.schema import ImageNode, ImageDocument
@@ -79,17 +86,6 @@ from llama_index.core.bridge.pydantic import Field, PrivateAttr
 #####################################################
 ## CODE:
 logger = logging.getLogger(__name__)
-
-@st.cache_resource
-def get_sat_sentence_splitter(
-    model_name: str = "sat-3l-sm"  # segment anything
-) -> SaT:
-    """Given the path to a sentence segmentation model, load it."""
-
-    # NOTE: okay we definitely could have not made this wrapper, but shrug
-    sat = SaT(model_name)
-    return sat
-
 
 @st.cache_resource
 def get_embedder(
