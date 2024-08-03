@@ -3,6 +3,7 @@ torchaudio
 torchvision
 transformers>=4.40.2
 sentence-transformers
+treelib
 nltk
 multi-rake
 yake
