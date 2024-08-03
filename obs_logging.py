@@ -28,6 +28,7 @@ import streamlit as st
 from llama_index.core.callbacks import CallbackManager, LlamaDebugHandler
 
 # Loads of stuff for the CICD
+from llama_index.core.schema import NodeWithScore
 from llama_index.core.instrumentation.events import BaseEvent
 from llama_index.core.instrumentation.event_handlers import BaseEventHandler
 
@@ -81,7 +82,7 @@ from llama_index.core.instrumentation.events.synthesis import (
 from llama_index.core.instrumentation.span import SimpleSpan
 from llama_index.core.instrumentation.span_handlers.base import BaseSpanHandler
 # Pretty Printing
-from llama_index.core.response.notebook_utils import display_source_node
+# from llama_index.core.response.notebook_utils import display_source_node
 
 # End user handler
 from llama_index.core.instrumentation import get_dispatcher
@@ -97,6 +98,16 @@ def get_callback_manager() -> CallbackManager:
     callback_manager = CallbackManager([LlamaDebugHandler()])
     return callback_manager
 
+
+def display_source_node(source_node: NodeWithScore, max_length: int = 100) -> str:
+    source_text = source_node.node.get_content().strip()
+    source_text = source_text[:max_length] + "..." if len(source_text) > max_length else source_text
+    text_md = (
+        f"**Node ID:** {source_node.node.node_id}<br>"
+        f"**Similarity:** {source_node.score}<br>"
+        f"**Text:** {source_text}<br>"
+    )
+    return text_md
 
 class RAGEventHandler(BaseEventHandler):
     """Pruned RAG Event Handler."""
