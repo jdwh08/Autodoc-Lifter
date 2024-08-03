@@ -4,7 +4,7 @@ emoji: 🦊📝
 colorFrom: yellow
 colorTo: red
 sdk: streamlit
-sdk_version: 1.25.0
+sdk_version: 1.30.0
 suggested_hardware: t4-small
 app_file: app.py
 short_description: Good Local RAG for Bad PDFs
