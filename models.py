@@ -23,8 +23,6 @@ import logging
 from typing import Any, Callable, Dict, List, Union, Optional, Sequence, Tuple, cast
 from PIL import Image as PILImage
 
-import config
-
 import streamlit as st
 
 import gc
@@ -251,7 +249,7 @@ def get_llm() -> BaseLLM:
 
     llm = Groq(
         model='llama-3.1-8b-instant',  # old: 'llama3-8b-8192'
-        api_key=config.groq_api_key,
+        api_key=os.environ.get('GROQ_API_KEY'),
     )
     return (llm)
 
