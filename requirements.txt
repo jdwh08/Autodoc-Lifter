@@ -7,7 +7,7 @@ wtpsplit
 nltk
 multi-rake
 yake
-symspell
+symspellpy
 rapidfuzz
 streamlit
 streamlit-pdf-viewer
