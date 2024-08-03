@@ -573,7 +573,7 @@ def chunk_by_header(
                 jndex -= 1
             
             if (jndex < 0):
-                raise Exception(f'Prior title chunk not found: {index}, {getattr(chunk.metadata, 'parent_id', '')}')
+                raise Exception(f'Prior title chunk not found: {index}, {chunk.metadata.get('parent_id', '')}')
             
             # Add this text into the prior title node.
             # if (not isinstance(output[jndex].metadata['page number'], list)):
