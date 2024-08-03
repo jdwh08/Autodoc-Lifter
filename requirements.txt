@@ -9,7 +9,7 @@ multi-rake
 yake
 symspellpy
 rapidfuzz
-streamlit
+streamlit>=1.30.0
 streamlit-pdf-viewer
 opencv-python-headless
 pdf2image
