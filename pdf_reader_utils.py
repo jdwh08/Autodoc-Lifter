@@ -569,11 +569,11 @@ def chunk_by_header(
                 and (output[jndex].metadata['type'] in ['Table', 'Image'])
             ):
                 # for title_chunk in output:
-                    # print(f'{title_chunk.id_}: {title_chunk.metadata['type']}, text: {title_chunk.text}, parent: {title_chunk.metadata['parent_id']}')
+                    # print(f'''{title_chunk.id_}: {title_chunk.metadata['type']}, text: {title_chunk.text}, parent: {title_chunk.metadata['parent_id']}''')
                 jndex -= 1
             
             if (jndex < 0):
-                raise Exception(f'Prior title chunk not found: {index}, {chunk.metadata.get('parent_id', '')}')
+                raise Exception(f'''Prior title chunk not found: {index}, {chunk.metadata.get('parent_id', None)}''')
             
             # Add this text into the prior title node.
             # if (not isinstance(output[jndex].metadata['page number'], list)):
