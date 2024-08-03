@@ -15,7 +15,7 @@
 ### PROGRAM SETTINGS
 import gc
 
-import config
+# import config
 import os
 import sys
 import logging
@@ -28,10 +28,6 @@ import nest_asyncio
 # Logging
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
-
-# API Keys
-os.environ['OPENAI_API_KEY'] = config.openai_api_key
-os.environ['GROQ_API_KEY'] = config.groq_api_key
 
 # CUDA GPU memory avoid fragmentation.
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'  # CUDA GPU memory avoid fragmentation.
@@ -88,6 +84,10 @@ from engine import get_engine
 from agent import doclist_to_agent
 from citation import get_citation_builder
 from obs_logging import get_callback_manager, get_obs
+
+# API Keys
+os.environ['OPENAI_API_KEY'] = st.secrets['openai_api_key']
+os.environ['GROQ_API_KEY'] = st.secrets['groq_api_key']
 
 #########################################################################
 ### SESSION STATE INITIALIZATION
