@@ -1,14 +1,20 @@
 ---
 title: Autodoc Lifter
 emoji: 🦊📝
-colorFrom: white
-colorTo: orange
+colorFrom: yellow
+colorTo: red
 sdk: streamlit
+sdk_version: 1.25.0
+suggested_hardware: t4-small
 app_file: app.py
+short_description: Good Local RAG for Bad PDFs
+tags: rag, llm, pdf, document
+license: agpl-3
 pinned: true
 ---
 
-# Autodoc-Lifter
+## Autodoc Lifter
+
 Document RAG system with LLMs.
 Some key goals for the project, once finished:
 
