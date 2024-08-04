@@ -21,4 +21,5 @@ llama-index-vector-stores-qdrant
 llama-index-retrievers-bm25
 llama-index-llms-huggingface
 llama-index-llms-groq
+llama-index-question-gen-openai  # required for subquestionqueryengine
 llama-index-multi-modal-llms-openai
