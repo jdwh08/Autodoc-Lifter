@@ -273,7 +273,8 @@ def handle_new_pdf(file_io) -> None:
         with (st.spinner(f"Reading input file, this make take some time...")):
             ### Save Locally
             # TODO: Get the user to upload their file with a reference name in a separate tab.
-            
+            if (not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))):
+                os.makedirs(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data'))
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data/input.pdf'), 'wb') as f:
                 f.write(file_io.getbuffer())
             
