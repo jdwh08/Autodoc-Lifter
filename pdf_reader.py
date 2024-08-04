@@ -161,8 +161,8 @@ class UnstructuredPDFReader():
         # self._node_parser = node_parser or Settings.node_parser  # set node parser to run on each Unstructured Title Chunk
 
         # Prerequisites for Unstructured.io to work
-        import nltk
         os.environ['NLTK_DATA'] = './nltk_data'
+        import nltk
         try: 
             if not nltk.data.find("tokenizers/punkt"):
                 nltk.download("punkt")

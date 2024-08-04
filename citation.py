@@ -48,8 +48,8 @@ class CitationBuilder():
     
     def __init__(self, text_splitter: Optional[Callable[[str], List[str]]] = None) -> None:
         if not text_splitter:
-            from nltk import sent_tokenize
             os.environ['NLTK_DATA'] = './nltk_data'
+            from nltk import sent_tokenize
             text_splitter = sent_tokenize
         self.text_splitter = text_splitter
     
