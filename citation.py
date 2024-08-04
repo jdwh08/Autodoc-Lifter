@@ -19,6 +19,8 @@
 
 #####################################################
 ## IMPORTS
+import os
+
 from typing import Callable, List, Dict, Any, Optional
 from collections import defaultdict
 from copy import deepcopy
@@ -47,6 +49,7 @@ class CitationBuilder():
     def __init__(self, text_splitter: Optional[Callable[[str], List[str]]] = None) -> None:
         if not text_splitter:
             from nltk import sent_tokenize
+            os.environ['NLTK_DATA'] = './nltk_data'
             text_splitter = sent_tokenize
         self.text_splitter = text_splitter
     

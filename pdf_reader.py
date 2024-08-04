@@ -162,6 +162,7 @@ class UnstructuredPDFReader():
 
         # Prerequisites for Unstructured.io to work
         import nltk
+        os.environ['NLTK_DATA'] = './nltk_data'
         try: 
             if not nltk.data.find("tokenizers/punkt"):
                 nltk.download("punkt")

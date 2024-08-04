@@ -1,0 +1,4 @@
+nltk_data/taggers/averaged_perceptron_tagger/averaged_perceptron_tagger.pickle filter=lfs diff=lfs merge=lfs -text
+nltk_data/tokenizers/punkt/english.pickle filter=lfs diff=lfs merge=lfs -text
+nltk_data/tokenizers/punkt/PY3/english.pickle filter=lfs diff=lfs merge=lfs -text
+*.pickle filter=lfs diff=lfs merge=lfs -text
