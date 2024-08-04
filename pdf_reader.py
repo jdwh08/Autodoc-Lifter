@@ -163,16 +163,21 @@ class UnstructuredPDFReader():
         # Prerequisites for Unstructured.io to work
         os.environ['NLTK_DATA'] = './nltk_data'
         import nltk
+        nltk.data.path = ['./nltk_data']
         try: 
             if not nltk.data.find("tokenizers/punkt"):
-                nltk.download("punkt")
+                # nltk.download("punkt")
+                print("Can't find punkt.")
         except Exception as e:
-            nltk.download("punkt")
+            # nltk.download("punkt")
+            print(e)
         try: 
             if not nltk.data.find("taggers/averaged_perceptron_tagger"):
-                nltk.download("averaged_perceptron_tagger")
+                # nltk.download("averaged_perceptron_tagger")
+                print("Can't find averaged_perceptron_tagger.")
         except Exception as e:
-            nltk.download("averaged_perceptron_tagger")
+            # nltk.download("averaged_perceptron_tagger")
+            print(e)
 
 
     # """DATA LOADING FUNCTIONS"""
